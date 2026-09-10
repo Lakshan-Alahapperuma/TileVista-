@@ -26,7 +26,6 @@ export class DesignerRepository {
       await tx.design_openings.deleteMany({ where: { design_id: designId } });
       await tx.design_items.deleteMany({ where: { design_id: designId } });
       await tx.custom_design_items.deleteMany({ where: { design_id: designId } });
-      await tx.design_measurements.deleteMany({ where: { design_id: designId } });
       await tx.design_walls.deleteMany({ where: { design_id: designId } });
 
       // 2. Create or Update parent room_design
@@ -157,23 +156,6 @@ export class DesignerRepository {
         });
       }
 
-      // 7. Insert new design_measurements
-      if (data.measurements && data.measurements.length > 0) {
-        await tx.design_measurements.createMany({
-          data: data.measurements.map((m) => ({
-            measurement_id: crypto.randomUUID(),
-            design_id: designId,
-            point_a_x: m.point_a_x,
-            point_a_y: m.point_a_y,
-            point_a_z: m.point_a_z,
-            point_b_x: m.point_b_x,
-            point_b_y: m.point_b_y,
-            point_b_z: m.point_b_z,
-            distance: m.distance,
-          }))
-        });
-      }
-
       return design;
     });
   }
@@ -217,7 +199,6 @@ export class DesignerRepository {
         },
         design_items: true,
         custom_design_items: true,
-        design_measurements: true,
       },
     });
   }

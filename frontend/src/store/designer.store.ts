@@ -1,6 +1,17 @@
 import { create } from 'zustand';
 import { DesignState, PlacedItem, WallOpening, RoomShape } from '../types/designer';
 
+export interface DoorSizeModalState {
+  isOpen: boolean;
+  target: 'placement' | 'existing';
+  openingType?: 'door' | 'window';
+  doorStyle?: string;
+  doorName?: string;
+  openingId?: string;
+  currentWidth: number;
+  currentHeight: number;
+}
+
 interface DesignerStoreState {
   state: DesignState;
   topView: boolean;
@@ -37,6 +48,8 @@ interface DesignerStoreState {
   orbitEnabled: boolean;
   undoStack: PlacedItem[][];
   redoStack: PlacedItem[][];
+  alertMessage: string | null;
+  doorSizeModal: DoorSizeModalState | null;
 }
 
 interface DesignerStoreActions {
@@ -75,6 +88,9 @@ interface DesignerStoreActions {
   setOrbitEnabled: (val: boolean) => void;
   setUndoStack: (stack: PlacedItem[][] | ((prev: PlacedItem[][]) => PlacedItem[][])) => void;
   setRedoStack: (stack: PlacedItem[][] | ((prev: PlacedItem[][]) => PlacedItem[][])) => void;
+  showAlert: (msg: string) => void;
+  hideAlert: () => void;
+  setDoorSizeModal: (modal: DoorSizeModalState | null) => void;
 
   recordHistory: (next: PlacedItem[]) => void;
   handleUndo: () => void;
@@ -138,6 +154,11 @@ export const useDesignerStore = create<DesignerStoreState & DesignerStoreActions
   orbitEnabled: true,
   undoStack: [],
   redoStack: [],
+  alertMessage: null,
+  doorSizeModal: null,
+  showAlert: (msg) => set({ alertMessage: msg }),
+  hideAlert: () => set({ alertMessage: null }),
+  setDoorSizeModal: (modal) => set({ doorSizeModal: modal }),
 
   setState: (updater) => set((prev) => ({
     state: typeof updater === 'function' ? updater(prev.state) : { ...prev.state, ...updater }

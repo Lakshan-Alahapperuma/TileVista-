@@ -31,7 +31,7 @@ export function remoteLog(message: string, ...args: any[]) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, args })
-  }).catch(() => {});
+  }).catch(() => { });
 }
 
 // ─── TYPES 
@@ -137,8 +137,63 @@ function closestPointOnPolygon(pt: { x: number, z: number }, polygon: [number, n
   return closestPt;
 }
 
-function clampItemToPolygon(pt: { x: number, z: number }, width: number, depth: number, rotation: number, polygon: [number, number][], shape: string = 'rectangular', roomW: number = 10, roomD: number = 10): { x: number, z: number } {
-  const poly3D = polygon.map(p => ({ x: p[0], z: -p[1] }));
+function isPointIn2DPolygon(x: number, y: number, polygon: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0], yi = polygon[i][1];
+    const xj = polygon[j][0], yj = polygon[j][1];
+
+    const intersect = ((yi > y) !== (yj > y))
+      && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function isItemFullyInsideRoom(x: number, z: number, width: number, depth: number, rotation: number, polygon: [number, number][]): boolean {
+  const corners = getItemCorners(x, z, width, depth, rotation);
+  return corners.every(c => isPointIn2DPolygon(c.x, c.z, polygon));
+}
+
+function getGuaranteedInsidePoint(polygon: [number, number][]): { x: number, z: number } {
+  let sumX = 0, sumZ = 0;
+  polygon.forEach(p => {
+    sumX += p[0];
+    sumZ += p[1];
+  });
+  const centerX = sumX / polygon.length;
+  const centerZ = sumZ / polygon.length;
+
+  if (isPointIn2DPolygon(centerX, centerZ, polygon)) {
+    return { x: centerX, z: centerZ };
+  }
+
+  const v0 = polygon[0];
+  const vx = v0[0];
+  const vz = v0[1];
+
+  for (let t = 0.1; t < 1.0; t += 0.1) {
+    const tx = vx + (centerX - vx) * t;
+    const tz = vz + (centerZ - vz) * t;
+    if (isPointIn2DPolygon(tx, tz, polygon)) {
+      return { x: tx, z: tz };
+    }
+  }
+  return { x: vx, z: vz };
+}
+
+function clampItemToPolygon(
+  pt: { x: number, z: number },
+  width: number,
+  depth: number,
+  rotation: number,
+  polygon: [number, number][],
+  shape: string = 'rectangular',
+  roomW: number = 10,
+  roomD: number = 10,
+  prevPt?: { x: number, z: number }
+): { x: number, z: number } {
+  const poly3D = polygon.map(p => ({ x: p[0], z: p[1] }));
   if (poly3D.length === 0) return pt;
 
   let minX = Infinity, maxX = -Infinity;
@@ -160,10 +215,43 @@ function clampItemToPolygon(pt: { x: number, z: number }, width: number, depth: 
   const bufferZ = rotatedD / 2;
 
   // Clamp the item center inside the room boundaries
-  return {
-    x: Math.max(minX + bufferX, Math.min(maxX - bufferX, pt.x)),
-    z: Math.max(minZ + bufferZ, Math.min(maxZ - bufferZ, pt.z))
-  };
+  const targetX = Math.max(minX + bufferX, Math.min(maxX - bufferX, pt.x));
+  const targetZ = Math.max(minZ + bufferZ, Math.min(maxZ - bufferZ, pt.z));
+
+  // If the target is fully inside the room shape, use it!
+  if (isItemFullyInsideRoom(targetX, targetZ, width, depth, rotation, polygon)) {
+    return { x: targetX, z: targetZ };
+  }
+
+  // If a valid previous position is provided, try to slide or fall back
+  if (prevPt && isItemFullyInsideRoom(prevPt.x, prevPt.z, width, depth, rotation, polygon)) {
+    // Try sliding in X
+    if (isItemFullyInsideRoom(targetX, prevPt.z, width, depth, rotation, polygon)) {
+      return { x: targetX, z: prevPt.z };
+    }
+    // Try sliding in Z
+    if (isItemFullyInsideRoom(prevPt.x, targetZ, width, depth, rotation, polygon)) {
+      return { x: prevPt.x, z: targetZ };
+    }
+    // Fall back to previous point
+    return prevPt;
+  }
+
+  // Ray-march from a guaranteed inside point towards the target
+  const start = getGuaranteedInsidePoint(polygon);
+  let best = { x: start.x, z: start.z };
+
+  for (let i = 0; i <= 20; i++) {
+    const t = i / 20;
+    const testX = start.x + (targetX - start.x) * t;
+    const testZ = start.z + (targetZ - start.z) * t;
+    if (isItemFullyInsideRoom(testX, testZ, width, depth, rotation, polygon)) {
+      best = { x: testX, z: testZ };
+    } else {
+      break;
+    }
+  }
+  return best;
 }
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
@@ -458,6 +546,24 @@ function RugModel({ selected }: { selected: boolean }) {
   );
 }
 
+const isBathtub = (type?: string, name?: string) => {
+  const t = (type || '').toLowerCase();
+  const n = (name || '').toLowerCase();
+  return t === 'bathtub' || n.includes('bath tub') || n.includes('bathtub') || n.includes('bath');
+};
+
+const isShower = (type?: string, name?: string) => {
+  const t = (type || '').toLowerCase();
+  const n = (name || '').toLowerCase();
+  return t === 'shower' || n.includes('shower');
+};
+
+const isSink = (type?: string, name?: string) => {
+  const t = (type || '').toLowerCase();
+  const n = (name || '').toLowerCase();
+  return t === 'sink' || t === 'basin' || n.includes('sink') || n.includes('basin');
+};
+
 function DynamicFurnitureModel({ item, selected, CustomFurniture }: { item: any, selected: boolean, CustomFurniture?: any }) {
   // If a GLB model exists, ALWAYS prioritize it over the procedural models
   if (item.model) {
@@ -514,6 +620,13 @@ function GLBModel({ url, selected, item }: { url: string, selected: boolean, ite
     else if (t === 'chair' || t === 'chairs') targetSize = 2.0;
     else if (t === 'tv_cabinet' || t === 'cabinet') targetSize = 5.0;
     else if (t === 'coffee_table') targetSize = 3.5;
+    else if (isBathtub(t, item.name)) targetSize = 6.8;
+    else if (isShower(t, item.name)) targetSize = 3.3;
+    else if (t === 'toilet') targetSize = 2.6;
+    else if (isSink(t, item.name)) targetSize = 2.8;
+    else if (t === 'washing_machine') targetSize = 2.8;
+    else if (t === 'towel_rail') targetSize = 2.0;
+    else if (t === 'light') targetSize = 0.8;
 
     // Cap the targetSize based on room size so items don't overflow small rooms
     if (state && state.widthFt && state.depthFt) {
@@ -521,8 +634,9 @@ function GLBModel({ url, selected, item }: { url: string, selected: boolean, ite
       const dMeters = state.depthFt * 0.3048;
       const maxRoomDim = Math.min(Math.max(1.5, wMeters), Math.max(1.5, dMeters));
 
-      // Target world size is targetSize * 0.3048. It should not exceed 80% of the room's smallest dimension
-      const maxTargetWorldSize = maxRoomDim * 0.8;
+      // Target world size is targetSize * 0.3048. It should not exceed 80% (95% for bathtubs, beds, sofas) of the room's smallest dimension
+      const limitFactor = (isBathtub(t, item.name) || t === 'beds' || t === 'bed' || t === 'sofa' || t === 'sofas') ? 0.95 : 0.8;
+      const maxTargetWorldSize = maxRoomDim * limitFactor;
       const currentTargetWorldSize = targetSize * 0.3048;
 
       if (currentTargetWorldSize > maxTargetWorldSize) {
@@ -533,7 +647,7 @@ function GLBModel({ url, selected, item }: { url: string, selected: boolean, ite
     console.log("GLB MaxDim:", maxDim, "TargetSize:", targetSize);
     if (maxDim > 0 && maxDim !== Infinity && !isNaN(maxDim)) {
       const scale = targetSize / maxDim;
-      
+
       // Apply base scale and custom asset scale transformations if defined
       const sx = item.scale?.x ? Number(item.scale.x) : 1;
       const sy = item.scale?.y ? Number(item.scale.y) : 1;
@@ -804,6 +918,22 @@ export const renderDoorIcon = (style: string) => {
           <rect x="36" y="8" width="14" height="44" fill="#e0f2fe" stroke="#38bdf8" strokeWidth="1" />
         </svg>
       );
+    case 'bathroom_window':
+      return (
+        <svg viewBox="0 0 40 40" className="w-10 h-10 text-emerald-700" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="6" y="6" width="28" height="28" rx="2" fill="#f4f4f5" stroke="#10b981" strokeWidth="2" />
+          <rect x="10" y="10" width="20" height="20" fill="#ccfbf1" stroke="#0d9488" strokeWidth="1" />
+          <line x1="20" y1="10" x2="20" y2="30" stroke="#0d9488" strokeWidth="1" />
+          <line x1="10" y1="20" x2="30" y2="20" stroke="#0d9488" strokeWidth="1" />
+        </svg>
+      );
+    case 'small_window':
+      return (
+        <svg viewBox="0 0 40 40" className="w-10 h-10 text-gray-700" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="6" y="10" width="28" height="20" rx="1" fill="#fcfcfc" />
+          <rect x="10" y="14" width="20" height="12" fill="#e0f2fe" stroke="#38bdf8" strokeWidth="1" />
+        </svg>
+      );
     case 'standard_window':
       return (
         <svg viewBox="0 0 40 40" className="w-10 h-10 text-gray-700" fill="none" stroke="currentColor" strokeWidth="2">
@@ -851,6 +981,8 @@ export const DOOR_STYLES = [
 ];
 
 export const WINDOW_STYLES = [
+  { id: 'bathroom_window', name: 'Bathroom Privacy Window', width: 0.6, height: 0.6, sillHeight: 1.6 },
+  { id: 'small_window', name: 'Small Awning Window', width: 0.8, height: 0.6, sillHeight: 1.5 },
   { id: 'standard_window', name: 'Standard Window', width: 1.0, height: 1.2, sillHeight: 0.9 },
   { id: 'double_window', name: 'Double Window', width: 1.6, height: 1.2, sillHeight: 0.9 },
   { id: 'large_window', name: 'Large Glass Window', width: 2.0, height: 1.8, sillHeight: 0.3 },
@@ -1942,7 +2074,7 @@ function formatLength(meters: number, unit: 'ft' | 'cm') {
   }
 }
 
-function getItemDimensions(type: string): { width: number, depth: number } {
+function getItemDimensions(type: string, name?: string): { width: number, depth: number } {
   const t = type;
   if (t === 'beds' || t === 'bed') return { width: 2.1, depth: 2.1 };
   if (t === 'wardrobes' || t === 'wardrobe') return { width: 1.25, depth: 1.25 };
@@ -1951,10 +2083,10 @@ function getItemDimensions(type: string): { width: number, depth: number } {
   if (t === 'chair' || t === 'chairs') return { width: 0.65, depth: 0.65 };
   if (t === 'tv_cabinet') return { width: 1.55, depth: 1.55 };
   if (t === 'coffee_table') return { width: 1.1, depth: 1.1 };
-  
-  if (t === 'sink') return { width: 1.6 * 0.3048, depth: 1.4 * 0.3048 };
-  if (t === 'bathtub') return { width: 4.3 * 0.3048, depth: 2.3 * 0.3048 };
-  if (t === 'shower') return { width: 3.0 * 0.3048, depth: 3.0 * 0.3048 };
+
+  if (isSink(t, name)) return { width: 1.6 * 0.3048, depth: 1.4 * 0.3048 };
+  if (isBathtub(t, name)) return { width: 4.3 * 0.3048, depth: 2.3 * 0.3048 };
+  if (isShower(t, name)) return { width: 3.0 * 0.3048, depth: 3.0 * 0.3048 };
   if (t === 'toilet') return { width: 1.4 * 0.3048, depth: 2.2 * 0.3048 };
   if (t === 'towel_rail') return { width: 1.8 * 0.3048, depth: 0.4 * 0.3048 };
   if (t === 'washing_machine') return { width: 2.0 * 0.3048, depth: 2.0 * 0.3048 };
@@ -2058,7 +2190,7 @@ function MeasurementOverlay({
 
         const itemPos = new THREE.Vector3(item.position[0], item.position[1], item.position[2]);
         const dims = getItemDimensions(item.type);
-        
+
         const cachedDims = globalItemDimensions.get(item.id);
         let wMeters = 0.5;
         let dMeters = 0.5;
@@ -2253,6 +2385,7 @@ function BathroomScene({
   setMeasureStartPoint,
   measureTempEndPoint,
   setMeasureTempEndPoint,
+  readOnly = false,
 }: {
   state: DesignState;
   setState: React.Dispatch<React.SetStateAction<DesignState>>;
@@ -2264,6 +2397,7 @@ function BathroomScene({
   setNumWalls: (n: number) => void;
   placedItems: PlacedItem[];
   setPlacedItems: React.Dispatch<React.SetStateAction<PlacedItem[]>>;
+  readOnly?: boolean;
   selectedItemId: string | null;
   setSelectedItemId: (s: string | null) => void;
   isPlacingItem: PlacedItem | null;
@@ -2570,7 +2704,7 @@ function BathroomScene({
           const ux = pt.x - w.p1[0];
           const uz = pt.z - w.p1[1];
           const wallLenSq = w.len * w.len;
-          const t = Math.max(0.1, Math.min(0.9, wallLenSq > 0 ? (ux * dx + uz * dz) / wallLenSq : 0));
+          const t = Math.max(0, Math.min(1, wallLenSq > 0 ? (ux * dx + uz * dz) / wallLenSq : 0));
           const projX = w.p1[0] + t * dx;
           const projZ = w.p1[1] + t * dz;
           const dist = Math.hypot(pt.x - projX, pt.z - projZ);
@@ -2582,9 +2716,15 @@ function BathroomScene({
         });
 
         const closestWall = walls[closestWallIdx];
-        const min = op.width / 2 + 0.1;
-        const max = closestWall.len - op.width / 2 - 0.1;
-        const clamped = Math.max(min, Math.min(max, closestOffset));
+        const halfW = op.width / 2;
+        const min = halfW + 0.02;
+        const max = closestWall.len - halfW - 0.02;
+        let clamped = closestOffset;
+        if (max > min) {
+          clamped = Math.max(min, Math.min(max, closestOffset));
+        } else {
+          clamped = Math.max(halfW, Math.min(closestWall.len - halfW, closestOffset));
+        }
 
         setState(prev => ({
           ...prev,
@@ -2653,17 +2793,11 @@ function BathroomScene({
         const ux = dx / wall.len, uz = dz / wall.len;
         let nx = -uz, nz = ux;
 
-        // Calculate room center to guarantee wall normal points INSIDE the room
-        let avgX = 0, avgZ = 0;
-        walls.forEach(w => { avgX += w.cx; avgZ += w.cz; });
-        const roomCenterX = avgX / walls.length;
-        const roomCenterZ = avgZ / walls.length;
-        
-        const toCenterX = roomCenterX - wall.cx;
-        const toCenterZ = roomCenterZ - wall.cz;
-        const dot = nx * toCenterX + nz * toCenterZ;
+        const polyCorners = walls.map(w => [w.p1[0], w.p1[1]] as [number, number]);
+        const testX = wall.cx + nx * 0.1;
+        const testZ = wall.cz + nz * 0.1;
         rotY = wall.rotY;
-        if (dot < 0) {
+        if (!isPointIn2DPolygon(testX, testZ, polyCorners)) {
           nx = -nx;
           nz = -nz;
           rotY += Math.PI;
@@ -2679,25 +2813,31 @@ function BathroomScene({
         posZ = wall.p1[1] + uz * snappedOffset + nz * bias;
       } else {
         // Free movement inside boundaries (Normal room designer)
-        const polyCorners = walls.map(w => [w.p1[0], -w.p1[1]] as [number, number]);
+        const polyCorners = walls.map(w => [w.p1[0], w.p1[1]] as [number, number]);
         const snapped = clampItemToPolygon(
           { x: pt.x, z: pt.z },
           itemW,
           itemD,
           itemToMove.rotation || 0,
           polyCorners,
-          'rectangular',
-          10, 10
+          state.shape,
+          w,
+          d,
+          itemToMove.position ? { x: itemToMove.position[0], z: itemToMove.position[2] } : undefined
         );
         posX = snapped.x;
         posZ = snapped.z;
       }
 
       let heightY = 0;
-      if (itemToMove.isWallMounted) {
+      const isBathtubItem = isBathtub(itemToMove.type, itemToMove.name);
+      const isShowerItem = isShower(itemToMove.type, itemToMove.name);
+      const isWallMounted = isBathtubItem ? false : (itemToMove.isWallMounted || isShowerItem);
+
+      if (isWallMounted) {
         const wallIdx = selectedRoomType === 'bathroom' ? undefined : undefined;
         let nx = 0, nz = 1, wallCx = 0, wallCz = 0;
-        
+
         if (selectedRoomType === 'bathroom') {
           // snaps along wall
           let closestWallIdx = 0;
@@ -2730,31 +2870,38 @@ function BathroomScene({
         );
         const wallPt = new THREE.Vector3();
         let itemHeight = 1.5; // fallback
-        if (dims && dims.height) {
+        if (isShowerItem) {
+          itemHeight = 2.1; // Procedural shower height
+        } else if (dims && dims.height) {
           itemHeight = dims.height;
         }
-        // Top of item (heightY + itemHeight) must stay below (h - 0.20) buffer to never touch the roof/ceiling
-        const maxH = Math.max(0.2, h - itemHeight - 0.20);
+
+        const minH = isShowerItem ? 1.0 : 0.1;
+        const maxH = Math.max(minH, h - itemHeight - 0.10);
         heightY = 1.37;
         if (raycasterRef.ray.intersectPlane(wallPlane, wallPt)) {
-          heightY = Math.max(0.1, Math.min(maxH, wallPt.y));
+          heightY = Math.max(minH, Math.min(maxH, wallPt.y));
         }
       }
 
       // Check collision against all other items (oriented bounding boxes)
       const candidateCorners = getItemCorners(posX, posZ, itemW, itemD, rotY + rotOffset);
       let collides = false;
-      if (selectedRoomType === 'bathroom') {
+      if (true) {
         for (const other of placedItems) {
           if (other.id === activeId) continue;
-          
+
           let otherW = 0.5, otherD = 0.5;
           const otherDims = globalItemDimensions.get(other.id);
           if (otherDims) {
             otherW = otherDims.width;
             otherD = otherDims.depth;
+          } else {
+            const fallback = getItemDimensions(other.type);
+            otherW = fallback.width;
+            otherD = fallback.depth;
           }
-          
+
           const otherCorners = getItemCorners(other.position[0], other.position[2], otherW, otherD, other.rotation);
           if (rectsIntersect(candidateCorners, otherCorners)) {
             collides = true;
@@ -3153,7 +3300,9 @@ function BathroomScene({
                   const hitPoint = e.point;
                   const proj = (hitPoint.x - wall.p1[0]) * (dx / wall.len) + (hitPoint.z - wall.p1[1]) * (dz / wall.len);
                   const halfW = activePlacement.width / 2;
-                  const clamped = Math.max(halfW + 0.1, Math.min(wall.len - halfW - 0.1, proj));
+                  const min = halfW + 0.02;
+                  const max = wall.len - halfW - 0.02;
+                  const clamped = max > min ? Math.max(min, Math.min(max, proj)) : Math.max(halfW, Math.min(wall.len - halfW, proj));
                   setHoveredWall({ idx: i, offset: clamped });
                 }}
                 onPointerOut={() => {
@@ -3166,7 +3315,9 @@ function BathroomScene({
                   const hitPoint = e.point;
                   const proj = (hitPoint.x - wall.p1[0]) * (dx / wall.len) + (hitPoint.z - wall.p1[1]) * (dz / wall.len);
                   const halfW = activePlacement.width / 2;
-                  const clamped = Math.max(halfW + 0.1, Math.min(wall.len - halfW - 0.1, proj));
+                  const min = halfW + 0.02;
+                  const max = wall.len - halfW - 0.02;
+                  const clamped = max > min ? Math.max(min, Math.min(max, proj)) : Math.max(halfW, Math.min(wall.len - halfW, proj));
 
                   setState(prev => ({
                     ...prev,
@@ -3301,7 +3452,7 @@ function BathroomScene({
 
       {/* Placed items */}
       {placedItems.map(item => {
-        const isSelected = selectedItemId === item.id;
+        const isSelected = !readOnly && selectedItemId === item.id;
         return (
           <group
             key={item.id}
@@ -3309,27 +3460,33 @@ function BathroomScene({
             rotation={[0, item.rotation, 0]}
             scale={[0.3048, 0.3048, 0.3048]}
             onPointerDown={(e) => {
+              if (readOnly) return;
               e.stopPropagation();
               draggingItemId.current = item.id;
               setOrbitEnabled(false);
             }}
             onDoubleClick={(e) => {
+              if (readOnly) return;
               e.stopPropagation();
               setSelectedItemId(item.id);
             }}
           >
-            {item.type === 'sink' && <SinkModel selected={isSelected} />}
-            {item.type === 'bathtub' && <BathtubModel selected={isSelected} />}
-            {item.type === 'shower' && <ShowerModel selected={isSelected} />}
-            {item.type === 'toilet' && <ToiletModel selected={isSelected} />}
-            {item.type === 'towel_rail' && <TowelRailModel selected={isSelected} />}
-            {item.type === 'washing_machine' && <WashingMachineModel selected={isSelected} />}
-            {item.type === 'light' && <WallLightModel selected={isSelected} />}
-            {item.type === 'plant' && <PlantModel selected={isSelected} />}
-
-            {/* Dynamic Furniture Models (fallback to 2D image) */}
-            {!['sink', 'bathtub', 'shower', 'toilet', 'towel_rail', 'washing_machine', 'light', 'plant'].includes(item.type) && (
+            {item.model ? (
               <DynamicFurnitureModel item={item} selected={isSelected} CustomFurniture={CustomFurniture} />
+            ) : (
+              <>
+                {item.type === 'sink' && <SinkModel selected={isSelected} />}
+                {item.type === 'bathtub' && <BathtubModel selected={isSelected} />}
+                {item.type === 'shower' && <ShowerModel selected={isSelected} />}
+                {item.type === 'toilet' && <ToiletModel selected={isSelected} />}
+                {item.type === 'towel_rail' && <TowelRailModel selected={isSelected} />}
+                {item.type === 'washing_machine' && <WashingMachineModel selected={isSelected} />}
+                {item.type === 'light' && <WallLightModel selected={isSelected} />}
+                {item.type === 'plant' && <PlantModel selected={isSelected} />}
+                {!['sink', 'bathtub', 'shower', 'toilet', 'towel_rail', 'washing_machine', 'light', 'plant'].includes(item.type) && (
+                  <DynamicFurnitureModel item={item} selected={isSelected} CustomFurniture={CustomFurniture} />
+                )}
+              </>
             )}
           </group>
         );
@@ -3361,7 +3518,7 @@ function BathroomScene({
           selectedItemId={selectedItemId}
         />
       )}
- 
+
       <OrbitControls
         ref={controlsRef}
         enabled={orbitEnabled}
@@ -3866,6 +4023,7 @@ function RoomPreview3D({
   setMeasureStartPoint,
   measureTempEndPoint,
   setMeasureTempEndPoint,
+  readOnly = false,
 }: {
   shape: RoomShape;
   width: number;
@@ -3896,6 +4054,7 @@ function RoomPreview3D({
   setMeasureStartPoint?: (p: THREE.Vector3 | null) => void;
   measureTempEndPoint?: THREE.Vector3 | null;
   setMeasureTempEndPoint?: (p: THREE.Vector3 | null) => void;
+  readOnly?: boolean;
 }) {
   const ref = useRef<THREE.Group>(null);
   const { camera, gl } = useThree();
@@ -4151,7 +4310,8 @@ function RoomPreview3D({
             polygon,
             shape,
             Math.max(1.5, width),
-            Math.max(1.5, length)
+            Math.max(1.5, length),
+            itemToMove.position ? { x: itemToMove.position[0], z: itemToMove.position[2] } : undefined
           );
           hit.x = snapped.x;
           hit.z = snapped.z;
@@ -4160,10 +4320,10 @@ function RoomPreview3D({
           let collides = false;
           const candidateCorners = getItemCorners(hit.x, hit.z, itemW, itemD, itemToMove.rotation || 0);
           const currentActiveId = activeId || (isPlacingItem ? isPlacingItem.id : null);
-          
+
           for (const other of placedItems) {
             if (other.id === currentActiveId) continue;
-            
+
             let otherW = 1.0, otherD = 1.0;
             const otherDims = globalItemDimensions.get(other.id);
             if (otherDims) {
@@ -4179,7 +4339,7 @@ function RoomPreview3D({
               else if (ot === 'tv_cabinet') { otherW = 1.55; otherD = 1.55; }
               else if (ot === 'coffee_table') { otherW = 1.1; otherD = 1.1; }
             }
-            
+
             const otherCorners = getItemCorners(other.position[0], other.position[2], otherW, otherD, other.rotation || 0);
             if (rectsIntersect(candidateCorners, otherCorners)) {
               collides = true;
@@ -4187,8 +4347,8 @@ function RoomPreview3D({
             }
           }
 
-          // Always allow free movement in normal room designer (no collision lock)
-          if (true) {
+          // Do not allow movement if it causes collision (collision lock)
+          if (!collides) {
             if (isPlacingItem) {
               setIsPlacingItem({ ...isPlacingItem, position: [hit.x, 0, hit.z] });
             } else if (draggingItemIdRef.current) {
@@ -4406,7 +4566,11 @@ function RoomPreview3D({
             onPointerDown={(e) => {
               if (!showOpeningsEditor) return;
               e.stopPropagation();
-              (e.target as any).setPointerCapture(e.pointerId);
+              try {
+                if (e.nativeEvent?.target && 'setPointerCapture' in (e.nativeEvent.target as any)) {
+                  (e.nativeEvent.target as any).setPointerCapture(e.pointerId);
+                }
+              } catch (_) {}
               setDraggingOpeningId(opening.id);
               onStartDrag();
             }}
@@ -4425,7 +4589,7 @@ function RoomPreview3D({
                     const ux = hit.x - w.p1[0];
                     const uz = hit.z - w.p1[1];
                     const wallLenSq = w.len * w.len;
-                    const t = Math.max(0.1, Math.min(0.9, wallLenSq > 0 ? (ux * dx + uz * dz) / wallLenSq : 0));
+                    const t = Math.max(0, Math.min(1, wallLenSq > 0 ? (ux * dx + uz * dz) / wallLenSq : 0));
                     const projX = w.p1[0] + t * dx;
                     const projZ = w.p1[1] + t * dz;
                     const dist = Math.hypot(hit.x - projX, hit.z - projZ);
@@ -4437,9 +4601,15 @@ function RoomPreview3D({
                   });
 
                   const closestWall = walls[closestWallIdx];
-                  const min = opening.width / 2 + 0.1;
-                  const max = closestWall.len - opening.width / 2 - 0.1;
-                  const clamped = Math.max(min, Math.min(max, closestOffset));
+                  const halfW = opening.width / 2;
+                  const min = halfW + 0.02;
+                  const max = closestWall.len - halfW - 0.02;
+                  let clamped = closestOffset;
+                  if (max > min) {
+                    clamped = Math.max(min, Math.min(max, closestOffset));
+                  } else {
+                    clamped = Math.max(halfW, Math.min(closestWall.len - halfW, closestOffset));
+                  }
                   onUpdateWallOpeningOffset(opening.id, clamped, closestWallIdx);
                 }
               }
@@ -4447,7 +4617,11 @@ function RoomPreview3D({
             onPointerUp={(e) => {
               if (draggingOpeningId === opening.id) {
                 e.stopPropagation();
-                (e.target as any).releasePointerCapture(e.pointerId);
+                try {
+                  if (e.nativeEvent?.target && 'releasePointerCapture' in (e.nativeEvent.target as any)) {
+                    (e.nativeEvent.target as any).releasePointerCapture(e.pointerId);
+                  }
+                } catch (_) {}
                 setDraggingOpeningId(null);
                 onEndDrag();
               }
@@ -4468,7 +4642,11 @@ function RoomPreview3D({
                       }`}
                     onPointerDown={(e) => {
                       e.stopPropagation();
-                      (e.target as any).setPointerCapture(e.pointerId);
+                      try {
+                        if (e.target && 'setPointerCapture' in (e.target as any)) {
+                          (e.target as any).setPointerCapture(e.pointerId);
+                        }
+                      } catch (_) {}
                       setDraggingOpeningId(opening.id);
                       onStartDrag();
                     }}
@@ -4487,7 +4665,7 @@ function RoomPreview3D({
                             const ux = hit.x - w.p1[0];
                             const uz = hit.z - w.p1[1];
                             const wallLenSq = w.len * w.len;
-                            const t = Math.max(0.1, Math.min(0.9, wallLenSq > 0 ? (ux * dx + uz * dz) / wallLenSq : 0));
+                            const t = Math.max(0, Math.min(1, wallLenSq > 0 ? (ux * dx + uz * dz) / wallLenSq : 0));
                             const projX = w.p1[0] + t * dx;
                             const projZ = w.p1[1] + t * dz;
                             const dist = Math.hypot(hit.x - projX, hit.z - projZ);
@@ -4499,9 +4677,15 @@ function RoomPreview3D({
                           });
 
                           const closestWall = walls[closestWallIdx];
-                          const min = opening.width / 2 + 0.1;
-                          const max = closestWall.len - opening.width / 2 - 0.1;
-                          const clamped = Math.max(min, Math.min(max, closestOffset));
+                          const halfW = opening.width / 2;
+                          const min = halfW + 0.02;
+                          const max = closestWall.len - halfW - 0.02;
+                          let clamped = closestOffset;
+                          if (max > min) {
+                            clamped = Math.max(min, Math.min(max, closestOffset));
+                          } else {
+                            clamped = Math.max(halfW, Math.min(closestWall.len - halfW, closestOffset));
+                          }
                           onUpdateWallOpeningOffset(opening.id, clamped, closestWallIdx);
                         }
                       }
@@ -4509,7 +4693,11 @@ function RoomPreview3D({
                     onPointerUp={(e) => {
                       if (draggingOpeningId === opening.id) {
                         e.stopPropagation();
-                        (e.target as any).releasePointerCapture(e.pointerId);
+                        try {
+                          if (e.target && 'releasePointerCapture' in (e.target as any)) {
+                            (e.target as any).releasePointerCapture(e.pointerId);
+                          }
+                        } catch (_) {}
                         setDraggingOpeningId(null);
                         onEndDrag();
                       }
@@ -4519,20 +4707,42 @@ function RoomPreview3D({
                   </div>
                 </Html>
 
-                {/* Delete button */}
+                {/* Delete & Resize buttons */}
                 <Html position={[0, opening.height + 0.25, 0.05]} center distanceFactor={10}>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveWallOpening(opening.id);
-                    }}
-                    className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-all border border-white/20 hover:scale-105"
-                    title="Delete element"
-                  >
-                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    </svg>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {opening.type === 'door' && (selectedRoomType === 'bathroom' || useDesignerStore.getState().state.designType === 'bathroom') && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          useDesignerStore.getState().setDoorSizeModal({
+                            isOpen: true,
+                            target: 'existing',
+                            openingId: opening.id,
+                            doorStyle: opening.style,
+                            doorName: opening.name || 'Door',
+                            currentWidth: opening.width,
+                            currentHeight: opening.height,
+                          });
+                        }}
+                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full flex items-center gap-1 shadow-lg transition-all border border-white/20 hover:scale-105 text-[9px] font-bold uppercase tracking-wider select-none whitespace-nowrap"
+                        title="Resize Door"
+                      >
+                        <span>📐</span> Resize
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveWallOpening(opening.id);
+                      }}
+                      className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-all border border-white/20 hover:scale-105"
+                      title="Delete element"
+                    >
+                      <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  </div>
                 </Html>
               </>
             )}
@@ -4587,14 +4797,22 @@ function RoomPreview3D({
                 if (rotate || isDraggingSomething) return;
                 if (!showResizing) return;
                 e.stopPropagation();
-                (e.target as any).setPointerCapture(e.pointerId);
+                try {
+                  if (e.nativeEvent?.target && 'setPointerCapture' in (e.nativeEvent.target as any)) {
+                    (e.nativeEvent.target as any).setPointerCapture(e.pointerId);
+                  }
+                } catch (_) {}
                 setDraggingWallIdx(idx);
                 onStartDrag();
               }}
               onPointerUp={(e) => {
                 if (draggingWallIdx === idx) {
                   e.stopPropagation();
-                  (e.target as any).releasePointerCapture(e.pointerId);
+                  try {
+                    if (e.nativeEvent?.target && 'releasePointerCapture' in (e.nativeEvent.target as any)) {
+                      (e.nativeEvent.target as any).releasePointerCapture(e.pointerId);
+                    }
+                  } catch (_) {}
                   setDraggingWallIdx(null);
                   onEndDrag();
                 }
@@ -4607,56 +4825,60 @@ function RoomPreview3D({
                   const hitPoint = e.point;
                   const proj = (hitPoint.x - wall.p1[0]) * (dx / wall.len) + (hitPoint.z - wall.p1[1]) * (dz / wall.len);
                   const halfW = activePlacement.width / 2;
-                  const clamped = Math.max(halfW + 0.1, Math.min(wall.len - halfW - 0.1, proj));
+                  const min = halfW + 0.02;
+                  const max = wall.len - halfW - 0.02;
+                  const clamped = max > min ? Math.max(min, Math.min(max, proj)) : Math.max(halfW, Math.min(wall.len - halfW, proj));
                   setHoveredWall({ idx, offset: clamped });
                 }
               }}
               onPointerOut={() => {
                 if (showOpeningsEditor) setHoveredWall(null);
               }}
-                onClick={(e) => {
-                  if (showOpeningsEditor && activePlacement) {
-                    e.stopPropagation();
-                    const dx = wall.p2[0] - wall.p1[0];
-                    const dz = wall.p2[1] - wall.p1[1];
-                    const hitPoint = e.point;
-                    const proj = (hitPoint.x - wall.p1[0]) * (dx / wall.len) + (hitPoint.z - wall.p1[1]) * (dz / wall.len);
-                    const halfW = activePlacement.width / 2;
-                    const clamped = Math.max(halfW + 0.1, Math.min(wall.len - halfW - 0.1, proj));
+              onClick={(e) => {
+                if (showOpeningsEditor && activePlacement) {
+                  e.stopPropagation();
+                  const dx = wall.p2[0] - wall.p1[0];
+                  const dz = wall.p2[1] - wall.p1[1];
+                  const hitPoint = e.point;
+                  const proj = (hitPoint.x - wall.p1[0]) * (dx / wall.len) + (hitPoint.z - wall.p1[1]) * (dz / wall.len);
+                  const halfW = activePlacement.width / 2;
+                  const min = halfW + 0.02;
+                  const max = wall.len - halfW - 0.02;
+                  const clamped = max > min ? Math.max(min, Math.min(max, proj)) : Math.max(halfW, Math.min(wall.len - halfW, proj));
 
-                    onAddWallOpening({
-                      id: `opening_${Date.now()}`,
-                      type: activePlacement.type,
-                      style: activePlacement.style,
-                      name: activePlacement.name,
-                      wallIndex: idx,
-                      positionOffset: clamped,
-                      width: activePlacement.width,
-                      height: activePlacement.height,
-                      sillHeight: activePlacement.sillHeight,
-                    });
-                    setActivePlacement(null);
-                    setHoveredWall(null);
-                  } else if (selectedRoomType === 'bathroom') {
-                    e.stopPropagation();
-                    setSelectedWallIdx(idx);
-                  }
-                }}
-              >
-                <boxGeometry args={[wall.len, (rotate || wizardStep === 2) ? 0.02 : height, 0.08]} />
-                <meshStandardMaterial
-                  color={isThisWallDragged ? '#4ade80' : ((showOpeningsEditor && activePlacement) || (selectedRoomType === 'bathroom' && selectedWallIdx === idx) ? '#22c55e' : '#ffffff')}
-                  transparent
-                  opacity={isThisWallDragged ? 0.7 : ((showOpeningsEditor && activePlacement && hoveredWall?.idx === idx) || (selectedRoomType === 'bathroom' && selectedWallIdx === idx) ? 0.25 : 0)}
-                  depthWrite={false}
-                />
+                  onAddWallOpening({
+                    id: `opening_${Date.now()}`,
+                    type: activePlacement.type,
+                    style: activePlacement.style,
+                    name: activePlacement.name,
+                    wallIndex: idx,
+                    positionOffset: clamped,
+                    width: activePlacement.width,
+                    height: activePlacement.height,
+                    sillHeight: activePlacement.sillHeight,
+                  });
+                  setActivePlacement(null);
+                  setHoveredWall(null);
+                } else if (selectedRoomType === 'bathroom') {
+                  e.stopPropagation();
+                  setSelectedWallIdx(idx);
+                }
+              }}
+            >
+              <boxGeometry args={[wall.len, (rotate || wizardStep === 2) ? 0.02 : height, 0.08]} />
+              <meshStandardMaterial
+                color={isThisWallDragged ? '#4ade80' : ((showOpeningsEditor && activePlacement) || (selectedRoomType === 'bathroom' && selectedWallIdx === idx) ? '#22c55e' : '#ffffff')}
+                transparent
+                opacity={isThisWallDragged ? 0.7 : ((showOpeningsEditor && activePlacement && hoveredWall?.idx === idx) || (selectedRoomType === 'bathroom' && selectedWallIdx === idx) ? 0.25 : 0)}
+                depthWrite={false}
+              />
             </mesh>
 
             {!rotate && showResizing && (
               <>
                 {/* Architectural dimension text embedded in line */}
                 <Html
-                  position={[wall.cx + normalX * 0.75, 0.05, wall.cz + normalZ * 0.75]}
+                  position={[wall.cx + normalX * 0.35, 0.05, wall.cz + normalZ * 0.35]}
                   center
                   zIndexRange={[100, 0]}
                 >
@@ -4671,30 +4893,30 @@ function RoomPreview3D({
                 </Html>
 
                 {/* Main dimension line (thin) */}
-                <mesh position={[wall.cx + normalX * 0.75, 0.01, wall.cz + normalZ * 0.75]} rotation={[0, wall.rotY, 0]}>
+                <mesh position={[wall.cx + normalX * 0.35, 0.01, wall.cz + normalZ * 0.35]} rotation={[0, wall.rotY, 0]}>
                   <boxGeometry args={[wall.len, 0.003, 0.003]} />
                   <meshBasicMaterial color="#71717a" />
                 </mesh>
 
                 {/* Start slash tick at 45 degrees */}
-                <mesh position={[wall.p1[0] + normalX * 0.75, 0.01, wall.p1[1] + normalZ * 0.75]} rotation={[0, wall.rotY + Math.PI / 4, 0]}>
+                <mesh position={[wall.p1[0] + normalX * 0.35, 0.01, wall.p1[1] + normalZ * 0.35]} rotation={[0, wall.rotY + Math.PI / 4, 0]}>
                   <boxGeometry args={[0.003, 0.003, 0.12]} />
                   <meshBasicMaterial color="#52525b" />
                 </mesh>
 
                 {/* End slash tick at 45 degrees */}
-                <mesh position={[wall.p2[0] + normalX * 0.75, 0.01, wall.p2[1] + normalZ * 0.75]} rotation={[0, wall.rotY + Math.PI / 4, 0]}>
+                <mesh position={[wall.p2[0] + normalX * 0.35, 0.01, wall.p2[1] + normalZ * 0.35]} rotation={[0, wall.rotY + Math.PI / 4, 0]}>
                   <boxGeometry args={[0.003, 0.003, 0.12]} />
                   <meshBasicMaterial color="#52525b" />
                 </mesh>
 
                 {/* Extension guide lines */}
-                <mesh position={[wall.p1[0] + normalX * 0.21, 0.01, wall.p1[1] + normalZ * 0.21]} rotation={[0, wall.rotY + Math.PI / 2, 0]}>
-                  <boxGeometry args={[0.75, 0.001, 0.001]} />
+                <mesh position={[wall.p1[0] + normalX * 0.175, 0.01, wall.p1[1] + normalZ * 0.175]} rotation={[0, wall.rotY + Math.PI / 2, 0]}>
+                  <boxGeometry args={[0.35, 0.001, 0.001]} />
                   <meshBasicMaterial color="#d4d4d8" transparent opacity={0.6} />
                 </mesh>
-                <mesh position={[wall.p2[0] + normalX * 0.21, 0.01, wall.p2[1] + normalZ * 0.21]} rotation={[0, wall.rotY + Math.PI / 2, 0]}>
-                  <boxGeometry args={[0.75, 0.001, 0.001]} />
+                <mesh position={[wall.p2[0] + normalX * 0.175, 0.01, wall.p2[1] + normalZ * 0.175]} rotation={[0, wall.rotY + Math.PI / 2, 0]}>
+                  <boxGeometry args={[0.35, 0.001, 0.001]} />
                   <meshBasicMaterial color="#d4d4d8" transparent opacity={0.6} />
                 </mesh>
               </>
@@ -4705,7 +4927,7 @@ function RoomPreview3D({
 
       {/* Placed items inside RoomPreview3D */}
       {placedItems && placedItems.map((item: any) => {
-        const isSelected = selectedItemId === item.id;
+        const isSelected = !readOnly && selectedItemId === item.id;
         return (
           <group
             key={item.id}
@@ -4713,26 +4935,33 @@ function RoomPreview3D({
             rotation={[0, item.rotation, 0]}
             scale={[0.3048, 0.3048, 0.3048]}
             onPointerDown={(e) => {
+              if (readOnly) return;
               e.stopPropagation();
               draggingItemIdRef.current = item.id;
               if (onStartDrag) onStartDrag();
             }}
             onDoubleClick={(e) => {
+              if (readOnly) return;
               e.stopPropagation();
               if (setSelectedItemId) setSelectedItemId(item.id);
             }}
           >
-            {item.type === 'sink' && <SinkModel selected={isSelected} />}
-            {item.type === 'bathtub' && <BathtubModel selected={isSelected} />}
-            {item.type === 'shower' && <ShowerModel selected={isSelected} />}
-            {item.type === 'toilet' && <ToiletModel selected={isSelected} />}
-            {item.type === 'towel_rail' && <TowelRailModel selected={isSelected} />}
-            {item.type === 'washing_machine' && <WashingMachineModel selected={isSelected} />}
-            {item.type === 'light' && <WallLightModel selected={isSelected} />}
-
-            {/* Dynamic Furniture Models (fallback to 2D image) */}
-            {!['sink', 'bathtub', 'shower', 'toilet', 'towel_rail', 'washing_machine', 'light', 'plant'].includes(item.type) && (
+            {item.model ? (
               <DynamicFurnitureModel item={item} selected={isSelected} CustomFurniture={CustomFurniture} />
+            ) : (
+              <>
+                {item.type === 'sink' && <SinkModel selected={isSelected} />}
+                {item.type === 'bathtub' && <BathtubModel selected={isSelected} />}
+                {item.type === 'shower' && <ShowerModel selected={isSelected} />}
+                {item.type === 'toilet' && <ToiletModel selected={isSelected} />}
+                {item.type === 'towel_rail' && <TowelRailModel selected={isSelected} />}
+                {item.type === 'washing_machine' && <WashingMachineModel selected={isSelected} />}
+                {item.type === 'light' && <WallLightModel selected={isSelected} />}
+                {item.type === 'plant' && <PlantModel selected={isSelected} />}
+                {!['sink', 'bathtub', 'shower', 'toilet', 'towel_rail', 'washing_machine', 'light', 'plant'].includes(item.type) && (
+                  <DynamicFurnitureModel item={item} selected={isSelected} CustomFurniture={CustomFurniture} />
+                )}
+              </>
             )}
           </group>
         );
@@ -4769,12 +4998,297 @@ function RoomPreview3D({
   );
 }
 
-// ─── SUMMARY MODAL ───────────────────────────────────────────────────────────
+const MemoizedCanvas = React.memo(({
+  state,
+  setState,
+  topView,
+  activeSideView,
+  setActiveSideView,
+  zoomTrigger,
+  setZoomTrigger,
+  setNumWalls,
+  placedItems,
+  setPlacedItems,
+  selectedItemId,
+  setSelectedItemId,
+  isPlacingItem,
+  setIsPlacingItem,
+  orbitEnabled,
+  setOrbitEnabled,
+  activePlacement,
+  setActivePlacement,
+  CustomFurniture,
+  measurementSettings,
+  isMeasuring,
+  setIsMeasuring,
+  savedMeasurements,
+  setSavedMeasurements,
+  measureStartPoint,
+  setMeasureStartPoint,
+  measureTempEndPoint,
+  setMeasureTempEndPoint,
+  activeCategory,
+  readOnly = false
+}: any) => {
+  return (
+    <div className={`h-full overflow-hidden transition-all duration-300 ${activeCategory === 'bathware_products' ? 'w-[calc(100%-420px)] flex-none' : 'flex-1 w-full'}`}>
+      <Canvas
+        camera={{ position: [6, 5, 8], fov: 45 }}
+        gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
+        style={{ width: '100%', height: '100%' }}
+        shadows
+      >
+        <color attach="background" args={["#ececec"]} />
+        <Suspense fallback={null}>
+          <BathroomScene
+            state={state}
+            setState={setState}
+            topView={topView}
+            activeSideView={activeSideView}
+            setActiveSideView={setActiveSideView}
+            zoomTrigger={zoomTrigger}
+            setZoomTrigger={setZoomTrigger}
+            setNumWalls={setNumWalls}
+            placedItems={placedItems}
+            setPlacedItems={setPlacedItems}
+            selectedItemId={selectedItemId}
+            setSelectedItemId={setSelectedItemId}
+            isPlacingItem={isPlacingItem}
+            setIsPlacingItem={setIsPlacingItem}
+            orbitEnabled={orbitEnabled}
+            setOrbitEnabled={setOrbitEnabled}
+            activePlacement={activePlacement}
+            setActivePlacement={setActivePlacement}
+            CustomFurniture={CustomFurniture}
+            measurementSettings={measurementSettings}
+            isMeasuring={isMeasuring}
+            setIsMeasuring={setIsMeasuring}
+            savedMeasurements={savedMeasurements}
+            setSavedMeasurements={setSavedMeasurements}
+            measureStartPoint={measureStartPoint}
+            setMeasureStartPoint={setMeasureStartPoint}
+            measureTempEndPoint={measureTempEndPoint}
+            setMeasureTempEndPoint={setMeasureTempEndPoint}
+            readOnly={readOnly}
+          />
+        </Suspense>
+      </Canvas>
+    </div>
+  );
+});
+MemoizedCanvas.displayName = 'MemoizedCanvas';
 
-function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { catalog: any[], categories: any[], CustomFurniture?: any }) {
+// ─── DOOR & WINDOW SIZE MODAL ──────────────────────────────────────────────────────────
+
+function DoorSizeModalComponent() {
+  const {
+    doorSizeModal, setDoorSizeModal,
+    setActivePlacement, setState, setWizardWallOpenings,
+    activeCategory, setActiveCategory, selectedRoomType, state
+  } = useDesignerStore();
+
+  const [widthInput, setWidthInput] = useState<string>('');
+  const [heightInput, setHeightInput] = useState<string>('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (doorSizeModal?.isOpen) {
+      setWidthInput(String(doorSizeModal.currentWidth));
+      setHeightInput(String(doorSizeModal.currentHeight));
+      setErrorMsg(null);
+    }
+  }, [doorSizeModal]);
+
+  if (!doorSizeModal?.isOpen) return null;
+
+  const isWindow = doorSizeModal.openingType === 'window' || doorSizeModal.doorStyle?.includes('window');
+
+  const handleApply = (customW?: number, customH?: number) => {
+    const w = customW !== undefined ? customW : parseFloat(widthInput);
+    const h = customH !== undefined ? customH : parseFloat(heightInput);
+
+    if (isNaN(w) || w < 0.3 || w > 3.5) {
+      setErrorMsg('Width must be between 0.3m and 3.5m');
+      return;
+    }
+    if (isNaN(h) || h < 0.3 || h > 3.5) {
+      setErrorMsg('Height must be between 0.3m and 3.5m');
+      return;
+    }
+
+    const roundedW = Math.round(w * 100) / 100;
+    const roundedH = Math.round(h * 100) / 100;
+
+    if (doorSizeModal.target === 'placement') {
+      setActivePlacement({
+        type: isWindow ? 'window' : 'door',
+        style: doorSizeModal.doorStyle || (isWindow ? 'bathroom_window' : 'single_door'),
+        name: doorSizeModal.doorName || (isWindow ? 'Window' : 'Door'),
+        width: roundedW,
+        height: roundedH,
+        sillHeight: isWindow ? 1.6 : 0,
+      });
+      if (activeCategory === 'openings') setActiveCategory(null);
+    } else if (doorSizeModal.target === 'existing' && doorSizeModal.openingId) {
+      setState(prev => ({
+        ...prev,
+        wallOpenings: prev.wallOpenings.map(op =>
+          op.id === doorSizeModal.openingId
+            ? { ...op, width: roundedW, height: roundedH }
+            : op
+        )
+      }));
+      setWizardWallOpenings(prev =>
+        prev.map(op =>
+          op.id === doorSizeModal.openingId
+            ? { ...op, width: roundedW, height: roundedH }
+            : op
+        )
+      );
+    }
+
+    setDoorSizeModal(null);
+  };
+
+  const currentWVal = parseFloat(widthInput) || 0;
+  const currentHVal = parseFloat(heightInput) || 0;
+
+  const presets = isWindow ? [
+    { label: 'Bath Privacy (0.60m × 0.60m)', w: 0.60, h: 0.60 },
+    { label: 'Small Awning (0.80m × 0.60m)', w: 0.80, h: 0.60 },
+    { label: 'Standard Window (1.00m × 1.20m)', w: 1.00, h: 1.20 },
+    { label: 'Double Window (1.60m × 1.20m)', w: 1.60, h: 1.20 },
+  ] : [
+    { label: 'Compact Bath (0.75m × 2.0m)', w: 0.75, h: 2.0 },
+    { label: 'Standard Door (0.90m × 2.0m)', w: 0.90, h: 2.0 },
+    { label: 'Wide Door (1.20m × 2.1m)', w: 1.20, h: 2.1 },
+    { label: 'Double Door (1.60m × 2.1m)', w: 1.60, h: 2.1 },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl p-6 shadow-2xl max-w-md w-full border border-gray-100 flex flex-col gap-5 animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-lg border border-emerald-200/60 shadow-sm">
+              {isWindow ? '🪟' : '🚪'}
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-[#1A1A1A] tracking-tight">
+                Specify {isWindow ? 'Window' : 'Door'} Dimensions
+              </h3>
+              <p className="text-xs text-gray-500 font-medium">
+                {doorSizeModal.doorName || (isWindow ? 'Bathroom Window' : 'Bathroom Door')}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setDoorSizeModal(null)}
+            className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-bold transition-all"
+          >
+            ✕
+          </button>
+        </div>
+
+        {errorMsg && (
+          <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-medium">
+            {errorMsg}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[11px] font-bold text-gray-600 block mb-1.5 uppercase tracking-wider">
+                Width (Meters)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0.3"
+                  max="3.5"
+                  value={widthInput}
+                  onChange={(e) => setWidthInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                />
+                <span className="absolute right-3 top-2.5 text-xs text-gray-400 font-medium">m</span>
+              </div>
+              <span className="text-[10px] text-gray-400 mt-1 block font-medium">
+                ≈ {currentWVal > 0 ? (currentWVal * 3.28084).toFixed(2) : '0'} ft
+              </span>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-gray-600 block mb-1.5 uppercase tracking-wider">
+                Height (Meters)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0.3"
+                  max="3.5"
+                  value={heightInput}
+                  onChange={(e) => setHeightInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                />
+                <span className="absolute right-3 top-2.5 text-xs text-gray-400 font-medium">m</span>
+              </div>
+              <span className="text-[10px] text-gray-400 mt-1 block font-medium">
+                ≈ {currentHVal > 0 ? (currentHVal * 3.28084).toFixed(2) : '0'} ft
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-2">
+              Quick Presets
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              {presets.map((preset, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    setWidthInput(String(preset.w));
+                    setHeightInput(String(preset.h));
+                  }}
+                  className="px-2.5 py-2 text-[11px] font-semibold border border-gray-200 rounded-xl hover:border-black hover:bg-gray-50 transition-all text-gray-700 text-left"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={() => setDoorSizeModal(null)}
+            className="px-4 py-2.5 text-xs font-bold text-gray-600 hover:text-gray-900 rounded-xl transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => handleApply()}
+            className="px-5 py-2.5 bg-black hover:bg-gray-800 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95"
+          >
+            {doorSizeModal.target === 'placement' ? `Set & Place ${isWindow ? 'Window' : 'Door'}` : `Update ${isWindow ? 'Window' : 'Door'} Size`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOnly = false }: { catalog: any[], categories: any[], CustomFurniture?: any, readOnly?: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const loadedDesignId = searchParams.get('id');
+  const loadedPackageId = searchParams.get('package');
   const [wizardCategory, setWizardCategory] = useState<string | null>(null);
   const [wizardDynamicItems, setWizardDynamicItems] = useState<any[]>([]);
   const [isWizardLoading, setIsWizardLoading] = useState(false);
@@ -4798,8 +5312,8 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
     }
   }, [wizardCategory]);
 
-  const { state, setState, topView, setTopView, activeSideView, setActiveSideView, zoomTrigger, setZoomTrigger, numWalls, setNumWalls, wizardStep, setWizardStep, fadeState, setFadeState, selectedRoomType, setSelectedRoomType, subRoomType, setSubRoomType, projectName, setProjectName, selectedShape, setSelectedShape, dimensionsUnit, setDimensionsUnit, widthInput, setWidthInput, lengthInput, setLengthInput, heightInput, setHeightInput, projectId, setProjectId, validationErrors, setValidationErrors, isSubmitting, setIsSubmitting, previewZoomTrigger, setPreviewZoomTrigger, activePlacement, setActivePlacement, wizardWallOpenings, setWizardWallOpenings, placedItems, setPlacedItems, selectedItemId, setSelectedItemId, isPlacingItem, setIsPlacingItem, activeCategory, setActiveCategory, showRoomCustomizer, setShowRoomCustomizer, showSummaryModal, setShowSummaryModal, showRoomTypeModal, setShowRoomTypeModal, orbitEnabled, setOrbitEnabled, undoStack, setUndoStack, redoStack, setRedoStack, recordHistory, handleUndo, handleRedo } = useDesignerStore();
- 
+  const { state, setState, topView, setTopView, activeSideView, setActiveSideView, zoomTrigger, setZoomTrigger, numWalls, setNumWalls, wizardStep, setWizardStep, fadeState, setFadeState, selectedRoomType, setSelectedRoomType, subRoomType, setSubRoomType, projectName, setProjectName, selectedShape, setSelectedShape, dimensionsUnit, setDimensionsUnit, widthInput, setWidthInput, lengthInput, setLengthInput, heightInput, setHeightInput, projectId, setProjectId, validationErrors, setValidationErrors, isSubmitting, setIsSubmitting, previewZoomTrigger, setPreviewZoomTrigger, activePlacement, setActivePlacement, wizardWallOpenings, setWizardWallOpenings, placedItems, setPlacedItems, selectedItemId, setSelectedItemId, isPlacingItem, setIsPlacingItem, activeCategory, setActiveCategory, showRoomCustomizer, setShowRoomCustomizer, showSummaryModal, setShowSummaryModal, showRoomTypeModal, setShowRoomTypeModal, orbitEnabled, setOrbitEnabled, undoStack, setUndoStack, redoStack, setRedoStack, recordHistory, handleUndo, handleRedo, alertMessage, showAlert, hideAlert, doorSizeModal, setDoorSizeModal } = useDesignerStore();
+
   // ─── MEASUREMENT TOOL STATES ───
   const [showMeasurementPanel, setShowMeasurementPanel] = useState(false);
   const [measurementSettings, setMeasurementSettings] = useState({
@@ -4812,6 +5326,26 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
   const [savedMeasurements, setSavedMeasurements] = useState<any[]>([]);
   const [measureStartPoint, setMeasureStartPoint] = useState<THREE.Vector3 | null>(null);
   const [measureTempEndPoint, setMeasureTempEndPoint] = useState<THREE.Vector3 | null>(null);
+  const [customiseFromWorkspace, setCustomiseFromWorkspace] = useState(false);
+
+  const openCustomiseFromWorkspace = () => {
+    const wCm = Math.round(state.widthFt * 30.48);
+    const lCm = Math.round(state.depthFt * 30.48);
+    const hCm = Math.round(state.heightFt * 30.48);
+
+    if (dimensionsUnit === 'm') {
+      setWidthInput((wCm / 100).toFixed(1));
+      setLengthInput((lCm / 100).toFixed(1));
+      setHeightInput((hCm / 100).toFixed(1));
+    } else {
+      setWidthInput(wCm.toString());
+      setLengthInput(lCm.toString());
+      setHeightInput(hCm.toString());
+    }
+
+    setCustomiseFromWorkspace(true);
+    setWizardStep(2);
+  };
 
 
 
@@ -4905,15 +5439,20 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
 
         // Map placed items
         const mappedItems = (data.items || []).map((it: any) => {
-          const isWallMounted = it.position[1] > 0.5;
+          const type = it.type || 'sink';
+          const name = it.name || '';
+          const isBathtubItem = isBathtub(type, name);
+          const isWallMounted = isBathtubItem ? false : (it.position && it.position[1] > 0.5);
+          const posY = isBathtubItem ? 0 : (it.position ? it.position[1] : 0);
+          const position = it.position ? [it.position[0], posY, it.position[2]] : [0, posY, 0];
           return {
             id: it.id,
-            type: it.type || 'sink',
+            type,
             name: it.name || (it.type ? (it.type.toUpperCase() + ' UNIT') : 'Unit'),
             model: it.modelUrl,
             cost: 250.00,
-            position: it.position,
-            rotation: it.rotation[1],
+            position,
+            rotation: (it.rotation && Array.isArray(it.rotation)) ? it.rotation[1] : (it.rotation_y || 0),
             isWallMounted
           };
         });
@@ -4943,12 +5482,176 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
         setWizardStep(5);
       } catch (err) {
         console.error("Load design error:", err);
-        alert("Failed to load saved design from the database.");
+        showAlert("Failed to load saved design from the database.");
       }
     };
 
     fetchSavedDesign();
   }, [loadedDesignId]);
+
+  // Load package visual layouts dynamically from database
+  useEffect(() => {
+    if (!loadedPackageId) return;
+
+    const fetchPackageData = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+        const STATIC_BASE = apiUrl.replace('/api', '');
+
+        // 1. Fetch all unified items to resolve images and GLB URLs
+        const itemsRes = await fetch(`${apiUrl}/items?includeHidden=true`);
+        if (!itemsRes.ok) throw new Error('Failed to fetch items catalog');
+        const allItems = await itemsRes.json();
+        const itemsMap = new Map(allItems.map((item: any) => [item.itemId, item]));
+
+        // 2. Fetch the package details
+        const pkgRes = await fetch(`${apiUrl}/packages/${loadedPackageId}`);
+        if (!pkgRes.ok) throw new Error('Failed to fetch package details');
+        const pkgData = await pkgRes.json();
+
+        // Standard pre-designed bathroom dimensions: 12ft x 9ft x 8.5ft
+        const wFt = 12.0;
+        const dFt = 9.0;
+        const hFt = 8.5;
+
+        // Set dimensions inputs (matches wizard config state)
+        const loadedWidth = wFt * 0.3048;
+        const loadedLength = dFt * 0.3048;
+        const loadedHeight = hFt * 0.3048;
+
+        if (dimensionsUnit === 'cm') {
+          setWidthInput(Math.round(loadedWidth * 100).toString());
+          setLengthInput(Math.round(loadedLength * 100).toString());
+          setHeightInput(Math.round(loadedHeight * 100).toString());
+        } else {
+          setWidthInput(loadedWidth.toString());
+          setLengthInput(loadedLength.toString());
+          setHeightInput(loadedHeight.toString());
+        }
+
+        // Apply tiles
+        let floorTexUrl: string | undefined = undefined;
+        let wallTexUrl: string | undefined = undefined;
+
+        // Map items
+        const mappedItems: any[] = [];
+        let sinkCount = 0;
+        let toiletCount = 0;
+        let bathCount = 0;
+        let showerCount = 0;
+
+        pkgData.items.forEach((pi: any) => {
+          const matchedItem = itemsMap.get(pi.osposItemId) as any;
+          if (!matchedItem) return;
+
+          const category = (matchedItem.category || '').toLowerCase();
+          const name = (matchedItem.name || '').toLowerCase();
+          
+          const formatUrl = (url?: string | null) => {
+            if (!url) return undefined;
+            if (url.startsWith('http://') || url.startsWith('https://')) return url;
+            return `${STATIC_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
+          };
+
+          const isTile = category.includes('tile') || category.includes('mosaic') || name.includes('tile') || name.includes('mosaic');
+
+          if (isTile) {
+            const isFloor = [4, 6, 17, 18, 20].includes(matchedItem.itemId) || name.includes('floor') || category.includes('floor');
+            if (isFloor) {
+              floorTexUrl = formatUrl(matchedItem.imageUrl);
+            } else {
+              wallTexUrl = formatUrl(matchedItem.imageUrl);
+            }
+          } else {
+            // Determine designer item type from POS category/name
+            let type = 'sink';
+            let position: [number, number, number] = [0, 0, 0];
+            let rotation = 0;
+            let isWallMounted = false;
+
+            if (category.includes('basin') || category.includes('sink') || name.includes('basin') || name.includes('sink') || name.includes('vanity')) {
+              type = 'sink';
+              position = [-0.6 + (sinkCount * 1.2), 0, -1.0];
+              rotation = 0;
+              sinkCount++;
+            } else if (category.includes('closet') || category.includes('toilet') || category.includes('wc') || name.includes('closet') || name.includes('toilet') || name.includes('wc') || name.includes('commode')) {
+              type = 'toilet';
+              position = [-1.3, 0, -0.2 + (toiletCount * 0.8)];
+              rotation = Math.PI / 2;
+              toiletCount++;
+            } else if (category.includes('bath') || name.includes('bath') || name.includes('tub')) {
+              type = 'bathtub';
+              position = [1.1, 0, 0.2 + (bathCount * 0.9)];
+              rotation = -Math.PI / 2;
+              bathCount++;
+            } else if (category.includes('shower') || name.includes('shower')) {
+              type = 'shower';
+              position = [1.1, 0, -1.0 + (showerCount * 0.9)];
+              rotation = -Math.PI / 2;
+              showerCount++;
+            } else if (category.includes('mirror') || name.includes('mirror') || category.includes('light')) {
+              type = 'light';
+              position = [0, 1.6, -1.3];
+              rotation = 0;
+              isWallMounted = true;
+            } else {
+              type = 'plant';
+              position = [-1.3, 0, 0.8];
+              rotation = 0;
+            }
+
+            const randId = 'item_' + Math.random().toString(36).substring(2, 9);
+            mappedItems.push({
+              id: randId,
+              type,
+              name: matchedItem.name,
+              model: formatUrl(matchedItem.glbUrl) || null,
+              cost: matchedItem.price || 150.00,
+              position,
+              rotation,
+              isWallMounted
+            });
+          }
+        });
+
+        const mappedWallDesigns = Array(8).fill(null).map(() => ({
+          splitMode: 'full' as const,
+          tileColorBottom: '#ffffff',
+          tileColorTop: '#ffffff',
+          tileColorCenter: '#ffffff',
+          tileColorSides: '#ffffff',
+          textureUrl: wallTexUrl || undefined
+        }));
+
+        setState({
+          widthFt: wFt,
+          depthFt: dFt,
+          heightFt: hFt,
+          shape: 'rectangular',
+          unit: 'cm',
+          floorColor: '#ffffff',
+          floorTextureUrl: floorTexUrl || undefined,
+          wallTextureUrl: wallTexUrl || undefined,
+          wallDesigns: mappedWallDesigns,
+          designType: 'bathroom',
+          subRoomType: undefined,
+          wallOpenings: []
+        });
+
+        setWizardWallOpenings([]);
+        setPlacedItems(mappedItems);
+        setProjectName(pkgData.name || 'Curated Package Layout');
+
+        // Skip setup steps and load straight to Step 5 (Workspace Canvas)
+        setWizardStep(5);
+      } catch (err: any) {
+        console.error("Load package layout error:", err);
+        showAlert("Failed to load pre-designed package layout: " + err.message);
+      }
+    };
+
+    fetchPackageData();
+  }, [loadedPackageId]);
 
   // Sync project ID to URL query parameters for page refreshes
   useEffect(() => {
@@ -5189,22 +5892,22 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
   };
 
   const widthInMeters = useMemo(() => {
-    if (wizardStep >= 3 && state.widthFt) return state.widthFt * 0.3048;
+    if (wizardStep >= 3 && !customiseFromWorkspace && state.widthFt) return state.widthFt * 0.3048;
     const val = parseFloat(widthInput) || 0;
     return dimensionsUnit === 'cm' ? val / 100 : val;
-  }, [widthInput, dimensionsUnit, wizardStep, state.widthFt]);
+  }, [widthInput, dimensionsUnit, wizardStep, customiseFromWorkspace, state.widthFt]);
 
   const lengthInMeters = useMemo(() => {
-    if (wizardStep >= 3 && state.depthFt) return state.depthFt * 0.3048;
+    if (wizardStep >= 3 && !customiseFromWorkspace && state.depthFt) return state.depthFt * 0.3048;
     const val = parseFloat(lengthInput) || 0;
     return dimensionsUnit === 'cm' ? val / 100 : val;
-  }, [lengthInput, dimensionsUnit, wizardStep, state.depthFt]);
+  }, [lengthInput, dimensionsUnit, wizardStep, customiseFromWorkspace, state.depthFt]);
 
   const heightInMeters = useMemo(() => {
-    if (wizardStep >= 3 && state.heightFt) return state.heightFt * 0.3048;
+    if (wizardStep >= 3 && !customiseFromWorkspace && state.heightFt) return state.heightFt * 0.3048;
     const val = parseFloat(heightInput) || 0;
     return dimensionsUnit === 'cm' ? val / 100 : val;
-  }, [heightInput, dimensionsUnit, wizardStep, state.heightFt]);
+  }, [heightInput, dimensionsUnit, wizardStep, customiseFromWorkspace, state.heightFt]);
 
   const handleWizardNext = async () => {
     if (wizardStep === 1) {
@@ -5343,7 +6046,7 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
 
   const handleSaveDesign = async () => {
     if (!projectId) {
-      alert("No active project ID found. Please complete the wizard setup first.");
+      showAlert("No active project ID found. Please complete the wizard setup first.");
       return;
     }
 
@@ -5446,7 +6149,7 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
         name: item.name,
         cost: item.cost,
         position_x: item.position[0],
-        position_y: item.position[1],
+        position_y: isBathtub(item.type, item.name) ? 0 : item.position[1],
         position_z: item.position[2],
         rotation_y: item.rotation,
         modelUrl: item.model
@@ -5477,15 +6180,15 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
       });
 
       if (response.ok) {
-        alert("Design successfully saved to the database!");
+        showAlert("Design successfully saved to the database!");
       } else {
         const errText = await response.text();
         console.error("Save layout failed:", errText);
-        alert("Failed to save design to database. Check console for details.");
+        showAlert("Failed to save design to database. Check console for details.");
       }
     } catch (err) {
       console.error(err);
-      alert("Network error. Design saved offline.");
+      showAlert("Network error. Design saved offline.");
     } finally {
       setIsSubmitting(false);
     }
@@ -5633,14 +6336,16 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
   const handleAddItem = (type: string) => {
     const catalogToUse = catalog;
     const cat = catalogToUse.find(i => i.type === type);
+    if (!cat) return;
+    const isWallMounted = type === 'bathtub' ? false : (type === 'shower' ? true : !!cat.isWallMounted);
     setIsPlacingItem({
       id: `${type}_${Date.now()}`,
       type,
       name: cat.name,
       cost: cat.cost,
-      position: [0, cat.isWallMounted ? 1.37 : 0, 0],
+      position: [0, isWallMounted ? 1.37 : 0, 0],
       rotation: 0,
-      isWallMounted: cat.isWallMounted,
+      isWallMounted,
     });
     setActiveCategory(null);
   };
@@ -5678,6 +6383,8 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
     );
   };
 
+
+
   if (wizardStep < 5) {
     return (
       <div className="flex h-screen bg-[#F0EFEB] font-sans overflow-hidden select-none relative">
@@ -5698,6 +6405,16 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
           <div className="flex-1 overflow-y-auto">
             <div className={`p-6 space-y-6 transition-all duration-200 transform ${fadeState === 'in' ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'
               }`}>
+
+
+
+
+
+              {/* step 1 */}
+
+
+
+
               {wizardStep === 1 ? (
                 <div className="space-y-6">
                   <div>
@@ -5811,15 +6528,30 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
                     </div>
                   </div>
                 </div>
+
+
+
+
+
+
+                /* step 2 */
+
+
+
+
+
+
               ) : wizardStep === 2 ? (
                 <div className="space-y-6">
                   <div>
-                    <span className="text-[10px] font-bold tracking-widest text-[#D4C5B9] uppercase block">Step 2 of 4</span>
+                    <span className="text-[10px] font-bold tracking-widest text-[#D4C5B9] uppercase block">
+                      {customiseFromWorkspace ? 'Room Customizer' : 'Step 2 of 4'}
+                    </span>
                     <h1 className="text-2xl font-semibold tracking-tight text-[#1A1A1A] mt-1">
-                      Adjust your dimensions
+                      {customiseFromWorkspace ? 'Room Dimensions' : 'Adjust your dimensions'}
                     </h1>
                     <p className="text-xs text-gray-500 font-light mt-1 max-w-sm leading-relaxed">
-                      Edit the floor plan on the right to match your room's wall dimensions.
+                      {customiseFromWorkspace ? 'Drag the walls/corners in the 2D floor plan, or type in the inputs below to resize your room.' : "Edit the floor plan on the right to match your room's wall dimensions."}
                     </p>
                   </div>
 
@@ -5911,6 +6643,11 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
                     </div>
                   </div>
                 </div>
+
+
+                /* step 3 */
+
+
               ) : wizardStep === 3 ? (
                 <div className="space-y-6">
                   <div>
@@ -5991,6 +6728,18 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
                   </div>
                 </div>
               ) : (
+
+
+
+
+
+
+                /* step 4 */
+
+
+
+
+
                 <div className="space-y-6">
                   <div>
                     <span className="text-[10px] font-bold tracking-widest text-[#D4C5B9] uppercase block">Step 4 of 4</span>
@@ -6025,6 +6774,20 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
                         <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
                         Selected: {isPlacingItem.name}
                       </div>
+
+
+
+
+
+
+
+                      {/* 3D preview */}
+
+
+
+
+
+
 
                       <ItemSidebarPreview item={isPlacingItem} />
 
@@ -6063,23 +6826,34 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
                         <div className="space-y-2">
                           <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase block">Categories</span>
                           <div className="grid grid-cols-2 gap-2.5">
-                            {categories.map((cat) => (
-                              <button
-                                key={cat.id}
-                                onClick={() => setWizardCategory(cat.id)}
-                                className="p-3 rounded-xl border border-gray-255 hover:border-gray-400 hover:bg-gray-50 flex flex-col items-center justify-center gap-2 transition-all duration-300"
-                              >
-                                <div className="h-10 flex items-center justify-center text-black">
-                                  {cat.icon}
-                                </div>
-                                <span className="text-[9px] font-bold block text-[#1A1A1A] text-center leading-tight">
-                                  {cat.label}
-                                </span>
-                              </button>
-                            ))}
+                            {categories
+                              .filter((cat) => {
+                                if (selectedRoomType === 'room') {
+                                  return cat.id !== 'wall_colours' && cat.id !== 'ospos_tiles' && cat.id !== 'wall_tiles' && cat.id !== 'floor_tiles';
+                                }
+                                return true;
+                              })
+                              .map((cat) => (
+                                <button
+                                  key={cat.id}
+                                  onClick={() => setWizardCategory(cat.id)}
+                                  className="p-3 rounded-xl border border-gray-255 hover:border-gray-400 hover:bg-gray-50 flex flex-col items-center justify-center gap-2 transition-all duration-300"
+                                >
+                                  <div className="h-10 flex items-center justify-center text-black">
+                                    {cat.icon}
+                                  </div>
+                                  <span className="text-[9px] font-bold block text-[#1A1A1A] text-center leading-tight">
+                                    {cat.label}
+                                  </span>
+                                </button>
+                              ))}
                           </div>
                         </div>
                       </>
+
+
+                      /* door and windows*/
+
                     ) : wizardCategory === 'openings' ? (
                       <>
                         <button
@@ -6215,7 +6989,7 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
 
           {/* Footer */}
           <div className="p-6 border-t border-gray-100 flex gap-3 bg-white">
-            {wizardStep > 1 && (
+            {wizardStep > 1 && !customiseFromWorkspace && (
               <button
                 onClick={() => transitionToStep(wizardStep - 1)}
                 className="flex-1 py-3.5 bg-white border border-black hover:bg-black hover:text-white text-black text-[10px] font-bold tracking-widest uppercase rounded-xl transition-all shadow-sm text-center"
@@ -6223,28 +6997,67 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
                 Go Back
               </button>
             )}
-            <button
-              onClick={handleWizardNext}
-              disabled={
-                (wizardStep === 1 && !selectedShape) ||
-                (wizardStep === 2 && Object.keys(validationErrors).some((k) => !!(validationErrors as any)[k])) ||
-                isSubmitting
-              }
-              className={`flex-1 py-3.5 bg-black hover:bg-[#222] text-white text-[10px] font-bold tracking-widest uppercase rounded-xl transition-all shadow-md flex items-center justify-center gap-2 ${((wizardStep === 1 && !selectedShape) ||
-                (wizardStep === 2 && Object.keys(validationErrors).some((k) => !!(validationErrors as any)[k])) ||
-                isSubmitting)
-                ? 'opacity-40 cursor-not-allowed bg-gray-400 shadow-none'
-                : ''
-                }`}
-            >
-              {isSubmitting ? (
-                <span className="w-4 h-4 border-2 border-white/35 border-t-white rounded-full animate-spin" />
-              ) : (
-                wizardStep === 4 ? 'Enter Workspace' : 'Next'
-              )}
-            </button>
+            {customiseFromWorkspace ? (
+              <button
+                onClick={() => {
+                  if (Object.keys(validationErrors).some((k) => !!(validationErrors as any)[k])) return;
+                  const wFt = cmToFeet(widthInMeters * 100);
+                  const dFt = cmToFeet(lengthInMeters * 100);
+                  const hFt = cmToFeet(heightInMeters * 100);
+                  setState((prev) => ({
+                    ...prev,
+                    widthFt: wFt,
+                    depthFt: dFt,
+                    heightFt: hFt,
+                  }));
+                  setWizardStep(5);
+                  setCustomiseFromWorkspace(false);
+                }}
+                disabled={Object.keys(validationErrors).some((k) => !!(validationErrors as any)[k])}
+                className={`flex-1 py-3.5 bg-black hover:bg-[#222] text-white text-[10px] font-bold tracking-widest uppercase rounded-xl transition-all shadow-md flex items-center justify-center gap-2 ${Object.keys(validationErrors).some((k) => !!(validationErrors as any)[k])
+                  ? 'opacity-40 cursor-not-allowed bg-gray-400 shadow-none'
+                  : ''
+                  }`}
+              >
+                Done
+              </button>
+            ) : (
+              <button
+                onClick={handleWizardNext}
+                disabled={
+                  (wizardStep === 1 && !selectedShape) ||
+                  (wizardStep === 2 && Object.keys(validationErrors).some((k) => !!(validationErrors as any)[k])) ||
+                  isSubmitting
+                }
+                className={`flex-1 py-3.5 bg-black hover:bg-[#222] text-white text-[10px] font-bold tracking-widest uppercase rounded-xl transition-all shadow-md flex items-center justify-center gap-2 ${((wizardStep === 1 && !selectedShape) ||
+                  (wizardStep === 2 && Object.keys(validationErrors).some((k) => !!(validationErrors as any)[k])) ||
+                  isSubmitting)
+                  ? 'opacity-40 cursor-not-allowed bg-gray-400 shadow-none'
+                  : ''
+                  }`}
+              >
+                {isSubmitting ? (
+                  <span className="w-4 h-4 border-2 border-white/35 border-t-white rounded-full animate-spin" />
+                ) : (
+                  wizardStep === 4 ? 'Enter Workspace' : 'Next'
+                )}
+              </button>
+            )}
           </div>
         </div>
+
+
+
+        {/*  step 5  */}
+
+
+
+        {/* 3D Preview */}
+
+
+
+
+
 
         {/* RIGHT COLUMN: 3D Preview */}
         <div className="flex-1 h-full bg-[#ececec] relative overflow-hidden">
@@ -6302,7 +7115,7 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
               {wizardStep === 4 && <ProductPanel />}
               <Canvas
                 camera={wizardStep === 1 || wizardStep === 2 ? { position: [0, 4, 6], fov: 42 } : { position: [0, 6, 7], fov: 38 }}
-                gl={{ antialias: true }}
+                gl={{ antialias: true, preserveDrawingBuffer: true }}
                 style={{ width: '100%', height: '100%' }}
                 shadows={wizardStep !== 2}
               >
@@ -6395,60 +7208,75 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
     );
   }
 
+
+
+
+
+
+
+
+
+
   return (
     <div className="flex h-screen bg-[#F0EFEB] font-sans overflow-hidden select-none relative">
 
-      {/* ── HEADER ── */}
-      <DesignerToolbar />
 
-      <ProductPanel />
+
+
+
+      {/* ── HEADER ── */}
+      <DesignerToolbar onSave={handleSaveDesign} readOnly={readOnly} />
+
+
+
+      <ProductPanel readOnly={readOnly} />
+
+
 
       {/* ── 3D CANVAS ── */}
-      <div className={`h-full overflow-hidden transition-all duration-300 ${activeCategory === 'bathware_products' ? 'w-[calc(100%-420px)] flex-none' : 'flex-1 w-full'}`}>
-        <Canvas
-          camera={{ position: [6, 5, 8], fov: 45 }}
-          gl={{ antialias: true, alpha: false }}
-          style={{ width: '100%', height: '100%' }}
-          shadows
-        >
-          <color attach="background" args={["#ececec"]} />
-          <Suspense fallback={null}>
-            <BathroomScene
-              state={state}
-              setState={setState}
-              topView={topView}
-              activeSideView={activeSideView}
-              setActiveSideView={setActiveSideView}
-              zoomTrigger={zoomTrigger}
-              setZoomTrigger={setZoomTrigger}
-              setNumWalls={setNumWalls}
-              placedItems={placedItems}
-              setPlacedItems={setPlacedItems}
-              selectedItemId={selectedItemId}
-              setSelectedItemId={setSelectedItemId}
-              isPlacingItem={isPlacingItem}
-              setIsPlacingItem={setIsPlacingItem}
-              orbitEnabled={orbitEnabled}
-              setOrbitEnabled={setOrbitEnabled}
-              activePlacement={activePlacement}
-              setActivePlacement={setActivePlacement}
-              CustomFurniture={CustomFurniture}
-              measurementSettings={measurementSettings}
-              isMeasuring={isMeasuring}
-              setIsMeasuring={setIsMeasuring}
-              savedMeasurements={savedMeasurements}
-              setSavedMeasurements={setSavedMeasurements}
-              measureStartPoint={measureStartPoint}
-              setMeasureStartPoint={setMeasureStartPoint}
-              measureTempEndPoint={measureTempEndPoint}
-              setMeasureTempEndPoint={setMeasureTempEndPoint}
-            />
-          </Suspense>
-        </Canvas>
-      </div>
+      <MemoizedCanvas
+        state={state}
+        setState={setState}
+        topView={topView}
+        activeSideView={activeSideView}
+        setActiveSideView={setActiveSideView}
+        zoomTrigger={zoomTrigger}
+        setZoomTrigger={setZoomTrigger}
+        setNumWalls={setNumWalls}
+        placedItems={placedItems}
+        setPlacedItems={setPlacedItems}
+        selectedItemId={selectedItemId}
+        setSelectedItemId={setSelectedItemId}
+        isPlacingItem={isPlacingItem}
+        setIsPlacingItem={setIsPlacingItem}
+        orbitEnabled={orbitEnabled}
+        setOrbitEnabled={setOrbitEnabled}
+        activePlacement={activePlacement}
+        setActivePlacement={setActivePlacement}
+        CustomFurniture={CustomFurniture}
+        measurementSettings={measurementSettings}
+        isMeasuring={isMeasuring}
+        setIsMeasuring={setIsMeasuring}
+        savedMeasurements={savedMeasurements}
+        setSavedMeasurements={setSavedMeasurements}
+        measureStartPoint={measureStartPoint}
+        setMeasureStartPoint={setMeasureStartPoint}
+        measureTempEndPoint={measureTempEndPoint}
+        setMeasureTempEndPoint={setMeasureTempEndPoint}
+        activeCategory={activeCategory}
+        readOnly={readOnly}
+      />
+
+
+
 
       {/* ── BOTTOM CONTROL BAR ── */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/85 backdrop-blur-md border border-gray-200/80 shadow-2xl rounded-full px-5 py-2.5 flex items-center gap-4 z-20">
+
+
+
+
+      {!readOnly && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/85 backdrop-blur-md border border-gray-200/80 shadow-2xl rounded-full px-5 py-2.5 flex items-center gap-4 z-20">
         {/* Dollhouse view */}
         <button
           id="btn-dollhouse"
@@ -6478,40 +7306,13 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
           Top View
         </button>
 
-        {/* Side views dropdown */}
-        {numWalls > 0 && (
-          <div className="relative group">
-            <button className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wider uppercase text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100/50 transition-all duration-300">
-              <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-              Side Views
-              <svg viewBox="0 0 24 24" className="w-2.5 h-2.5 ml-1 opacity-60" fill="none" stroke="currentColor" strokeWidth="3">
-                <path d="m18 15-6-6-6 6" />
-              </svg>
-            </button>
-            <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-white border border-gray-200 shadow-xl rounded-xl py-1.5 hidden group-hover:flex flex-col min-w-[130px] z-30">
-              {Array.from({ length: numWalls }).map((_, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => { setTopView(false); setActiveSideView(idx); }}
-                  className="w-full text-center px-4 py-2 text-[10px] font-bold tracking-wider uppercase text-gray-700 hover:bg-gray-100 hover:text-[#1A1A1A] transition-colors"
-                >
-                  Wall {idx + 1} ({idx === 0 ? 'Back' : idx === 1 ? 'Right' : idx === 2 ? 'Left' : 'Front'})
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="w-[1px] h-5 bg-gray-200" />
 
         {/* Customise room */}
         <button
           id="btn-customise"
-          onClick={() => setShowRoomCustomizer(!showRoomCustomizer)}
-          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase rounded-full tracking-wider transition-all ${showRoomCustomizer ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+          onClick={openCustomiseFromWorkspace}
+          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase rounded-full tracking-wider transition-all ${wizardStep === 2 && customiseFromWorkspace ? 'bg-black text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
         >
           <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
             <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
@@ -6587,14 +7388,21 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
           <>
             <div className="w-[1px] h-5 bg-gray-200" />
 
+
+
+
+
             {/* Measurement tool button & popup panel */}
+
+
+
+
             <div className="relative">
               <button
                 id="btn-measurement"
                 onClick={() => setShowMeasurementPanel(!showMeasurementPanel)}
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-                  showMeasurementPanel ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${showMeasurementPanel ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
                 title="Measurement Options"
               >
                 <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -6607,11 +7415,11 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
                   <div className="flex justify-between items-center gap-4">
                     <span className="text-xs font-bold text-gray-700">Product spacing</span>
                     <label className="relative inline-flex items-center cursor-pointer select-none">
-                      <input 
-                        type="checkbox" 
-                        checked={measurementSettings.productSpacing} 
-                        onChange={(e) => setMeasurementSettings(prev => ({ ...prev, productSpacing: e.target.checked }))} 
-                        className="sr-only peer" 
+                      <input
+                        type="checkbox"
+                        checked={measurementSettings.productSpacing}
+                        onChange={(e) => setMeasurementSettings(prev => ({ ...prev, productSpacing: e.target.checked }))}
+                        className="sr-only peer"
                       />
                       <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-black"></div>
                     </label>
@@ -6620,11 +7428,11 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
                   <div className="flex justify-between items-center gap-4">
                     <span className="text-xs font-bold text-gray-700">Room dimensions</span>
                     <label className="relative inline-flex items-center cursor-pointer select-none">
-                      <input 
-                        type="checkbox" 
-                        checked={measurementSettings.roomDimensions} 
-                        onChange={(e) => setMeasurementSettings(prev => ({ ...prev, roomDimensions: e.target.checked }))} 
-                        className="sr-only peer" 
+                      <input
+                        type="checkbox"
+                        checked={measurementSettings.roomDimensions}
+                        onChange={(e) => setMeasurementSettings(prev => ({ ...prev, roomDimensions: e.target.checked }))}
+                        className="sr-only peer"
                       />
                       <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-black"></div>
                     </label>
@@ -6635,14 +7443,14 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
                   <div className="flex justify-between items-center gap-4">
                     <span className="text-xs font-bold text-gray-700">Unit</span>
                     <div className="flex bg-gray-100 rounded-lg p-0.5 border border-gray-200/50">
-                      <button 
+                      <button
                         type="button"
                         onClick={() => setMeasurementSettings(prev => ({ ...prev, unit: 'ft' }))}
                         className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${measurementSettings.unit === 'ft' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-black'}`}
                       >
                         ft
                       </button>
-                      <button 
+                      <button
                         type="button"
                         onClick={() => setMeasurementSettings(prev => ({ ...prev, unit: 'cm' }))}
                         className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${measurementSettings.unit === 'cm' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-black'}`}
@@ -6657,20 +7465,44 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
           </>
         )}
       </div>
-
-      {/* ── CUSTOMISE ROOM DRAWER ── */}
-      {showRoomCustomizer && (
-        <CustomiseRoomDrawer
-          state={state}
-          numWalls={numWalls}
-          onChange={update}
-          onClose={() => setShowRoomCustomizer(false)}
-        />
       )}
+
+
 
 
       {/* ── SAVE DESIGN MODAL ── */}
       <SaveDesignModal />
+      <DoorSizeModalComponent />
+
+
+
+
+      {/* ── CUSTOM ALERT MODAL ── */}
+
+
+      {alertMessage && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl max-w-sm w-full mx-4 border border-gray-100 flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-[#1A1A1A] flex items-center justify-center text-[#D4C5B9] mb-4">
+              <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
+            <h3 className="text-base font-bold text-[#1A1A1A] tracking-tight">Notification</h3>
+            <p className="text-xs text-gray-500 font-light mt-2 leading-relaxed">
+              {alertMessage}
+            </p>
+            <button
+              onClick={hideAlert}
+              className="mt-6 w-full py-3 bg-[#1A1A1A] hover:bg-[#333] text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -6698,14 +7530,14 @@ export function ItemSidebarPreview({ item, heightClass = "h-40" }: { item: any, 
   );
 }
 
-export default function SharedDesignerEngine({ catalog, categories, CustomFurniture }: { catalog: any[], categories: any[], CustomFurniture?: any }) {
+export default function SharedDesignerEngine({ catalog, categories, CustomFurniture, readOnly = false }: { catalog: any[], categories: any[], CustomFurniture?: any, readOnly?: boolean }) {
   return (
     <Suspense fallback={
       <div className="flex h-screen w-screen items-center justify-center bg-[#FAF9F6] text-xs font-semibold text-gray-500 uppercase tracking-widest">
         Loading TileVista Planner...
       </div>
     }>
-      <BathroomPlannerPageInner catalog={catalog} categories={categories} CustomFurniture={CustomFurniture} />
+      <BathroomPlannerPageInner catalog={catalog} categories={categories} CustomFurniture={CustomFurniture} readOnly={readOnly} />
     </Suspense>
   );
 }

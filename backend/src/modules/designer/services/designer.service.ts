@@ -128,15 +128,7 @@ export class DesignerService {
         position: [Number(it.position_x), Number(it.position_y), Number(it.position_z)],
         rotation: [0, Number(it.rotation_y), 0],
       })),
-      measurements: (layout.design_measurements || []).map((m: any) => ({
-        point_a_x: Number(m.point_a_x),
-        point_a_y: Number(m.point_a_y),
-        point_a_z: Number(m.point_a_z),
-        point_b_x: Number(m.point_b_x),
-        point_b_y: Number(m.point_b_y),
-        point_b_z: Number(m.point_b_z),
-        distance: Number(m.distance),
-      })),
+      measurements: [],
     };
   }
 

@@ -157,6 +157,12 @@ const SHOWER_ICON = (
     <path d="M10 16v1M12 16v2M14 16v1" />
   </svg>
 );
+const PACKAGES_ICON = (
+  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+  </svg>
+);
+
 export function getActiveCatalog(designType: 'room' | 'bathroom', subRoomType?: 'dining_room' | 'bed_room' | 'living_room') {
   if (designType === 'room') {
     let items = [
@@ -240,5 +246,6 @@ export function getActiveCategories(designType: 'room' | 'bathroom', subRoomType
     { id: 'wall_tiles', label: 'Wall Tiles', icon: WALL_TILES_ICON },
     { id: 'floor_tiles', label: 'Floor Tiles', icon: FLOOR_TILES_ICON },
     { id: 'bathware_products', label: 'Add Product', icon: SINK_ICON },
+    { id: 'packages', label: 'Curated Packages', icon: PACKAGES_ICON },
   ];
 }

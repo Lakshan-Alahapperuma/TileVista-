@@ -146,3 +146,49 @@ export interface AnalyticsReport {
   salesTrends: SalesTrend[];
   restockAlertsCount: number;
 }
+
+// --- 3D MODEL GENERATION TYPES ---
+export type ModelGenerationStatus =
+  | 'UPLOADED'
+  | 'QUEUED'
+  | 'EXTRACTING_FRAMES'
+  | 'RECONSTRUCTING'
+  | 'GENERATING_MESH'
+  | 'TEXTURING'
+  | 'EXPORTING_GLB'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED';
+
+export type ModelInputType = 'VIDEO' | 'IMAGES';
+
+export interface ModelGenerationProject {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string;
+  inputType: ModelInputType;
+  status: ModelGenerationStatus;
+  progress: number;
+  currentStep?: string;
+  inputVideoPath?: string;
+  outputGlbPath?: string;
+  thumbnailPath?: string;
+  errorMessage?: string;
+  fileSize?: string;
+  processingStartedAt?: Date;
+  completedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  images?: ModelGenerationImage[];
+  modelUrl?: string;
+}
+
+export interface ModelGenerationImage {
+  id: string;
+  projectId: string;
+  filePath: string;
+  originalName?: string;
+  orderNumber?: number;
+  createdAt: Date;
+}

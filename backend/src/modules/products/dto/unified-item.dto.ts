@@ -8,6 +8,8 @@ import { IsNumber, IsString, IsOptional, IsIn, IsPositive, IsBoolean } from 'cla
 export class UnifiedItemDto {
   /** OSPOS item_id — the single source of truth identifier */
   itemId: number;
+  /** TileVista product database UUID, if mapped */
+  productId?: string | null;
   /** Live item name from OSPOS */
   name: string;
   /** Category string from OSPOS (e.g. "Tiles", "Sanitaryware") */

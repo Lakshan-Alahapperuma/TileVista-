@@ -23,6 +23,7 @@ export class ProductsService {
   ): UnifiedItemDto {
     const dto = new UnifiedItemDto();
     dto.itemId = osposItem.item_id;
+    dto.productId = dbProduct ? dbProduct.product_id : null;
     dto.name = osposItem.name;
     dto.category = osposItem.category ?? '';
     dto.categoryId = osposItem.category_id ?? null;
