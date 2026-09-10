@@ -40,57 +40,64 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({ product }) 
 
   return (
     <>
-      <div className="flex flex-col bg-white border border-gray-100 hover:border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 group">
+      <div className="group relative flex flex-col bg-white border border-gray-150 hover:border-[#1A1A1A] hover:shadow-lg transition-all duration-300 overflow-hidden">
+        {/* Clickable Product Image */}
         <Link href={`/products/${getProductSlug(product)}`} className="relative w-full aspect-square bg-[#F9F9F7] overflow-hidden block">
           <div
             className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
             style={{ backgroundImage: `url('${imageUrl}')` }}
           />
 
-          {/* Category overlay */}
-          <span className="absolute top-4 left-4 z-10 bg-white/95 text-[#1A1A1A] font-bold text-[8px] uppercase tracking-widest px-2.5 py-1 shadow-sm">
-            {product.category}
-          </span>
+          {/* Top-Left Discount or Tile Size Overlay */}
+          <div className="absolute top-3 left-3 z-10 flex flex-col gap-1 items-start">
+            {(product as any).discountPercentage ? (
+              <span className="bg-[#C8102E] text-white font-bold text-[8.5px] uppercase tracking-wider px-2.5 py-1 shadow-sm">
+                {(product as any).discountPercentage}% OFF
+              </span>
+            ) : (product as any).discount ? (
+              <span className="bg-[#C8102E] text-white font-bold text-[8.5px] uppercase tracking-wider px-2.5 py-1 shadow-sm">
+                {(product as any).discount} OFF
+              </span>
+            ) : product.category.toLowerCase().includes('tile') && product.size ? (
+              <span className="bg-black/90 text-white font-mono font-bold text-[7.5px] uppercase tracking-wider px-2 py-0.5 shadow-sm">
+                {product.size}
+              </span>
+            ) : null}
+          </div>
 
+          {/* Slide-up Add to Cart button on hover */}
+          <button
+            onClick={handleAddToCartClick}
+            disabled={product.quantity <= 0 || justAdded}
+            className={`absolute bottom-0 inset-x-0 py-3 px-4 transition-transform duration-300 transform translate-y-full group-hover:translate-y-0 z-20 flex items-center justify-center gap-2 text-xs font-bold tracking-widest uppercase shadow-md ${
+              justAdded ? 'bg-green-600 text-white' : 'bg-[#1A1A1A] hover:bg-[#D4C5B9] hover:text-[#1A1A1A] text-white'
+            }`}
+            aria-label="Add to cart"
+          >
+            {justAdded ? (
+              <>
+                <Check size={14} />
+                <span>Added to Cart</span>
+              </>
+            ) : (
+              <>
+                <ShoppingCart size={14} />
+                <span>Add to Cart</span>
+              </>
+            )}
+          </button>
         </Link>
 
-        <div className="p-5 flex flex-col flex-1">
+        {/* Clean Minimal Card Content Section */}
+        <div className="p-4 flex flex-col flex-1 justify-between gap-1.5 bg-white">
           <Link href={`/products/${getProductSlug(product)}`}>
-            <h3 className="text-sm font-semibold text-[#1A1A1A] tracking-wide mb-1.5 line-clamp-1 hover:text-[#D4C5B9] transition-colors">
+            <h3 className="text-sm font-semibold text-[#1A1A1A] tracking-wide line-clamp-1 hover:text-[#D4C5B9] transition-colors">
               {product.name}
             </h3>
           </Link>
 
-          <div className="flex items-baseline gap-2 mb-4">
+          <div className="flex items-center justify-between pt-1">
             <span className="text-sm font-bold text-[#C8102E]">{formatLKR(product.price)}</span>
-          </div>
-
-          <div className="border-t border-gray-100 pt-4 flex items-center justify-between gap-3 mt-auto">
-            <Link
-              href={`/products/${getProductSlug(product)}`}
-              className="border border-gray-200 hover:border-[#1A1A1A] text-gray-500 hover:text-[#1A1A1A] p-3 transition-all duration-300 flex items-center justify-center"
-              aria-label="View Details"
-            >
-              <Eye size={15} />
-            </Link>
-            <button
-              onClick={handleAddToCartClick}
-              disabled={product.quantity <= 0 || justAdded}
-              className={`flex-1 ${justAdded ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-[#1A1A1A] hover:bg-[#D4C5B9] hover:text-[#1A1A1A] text-white'} py-3 px-4 transition-all duration-300 disabled:opacity-50 disabled:hover:bg-[#1A1A1A] disabled:hover:text-white flex items-center justify-center gap-2 text-xs font-semibold tracking-wider uppercase`}
-              aria-label="Add to cart"
-            >
-              {justAdded ? (
-                <>
-                  <Check size={14} />
-                  <span>Added</span>
-                </>
-              ) : (
-                <>
-                  <ShoppingCart size={14} />
-                  <span>Add to Cart</span>
-                </>
-              )}
-            </button>
           </div>
         </div>
       </div>

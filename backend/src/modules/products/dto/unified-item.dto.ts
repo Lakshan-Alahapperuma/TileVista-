@@ -28,6 +28,11 @@ export class UnifiedItemDto {
   brand: string | null;
   /** Color from OSPOS attribute link */
   color: string | null;
+  /** Size description (e.g. "60x60 cm") from OSPOS attribute or asset_sizes */
+  size: string | null;
+  /** 3D physical dimensions for virtual room designer (width, height, depth, unit) */
+  dimensions: { width: number; height: number; depth: number; unit: string } | null;
+
 
   // ── Asset Catalog Fields (from TileVista product_assets) ─────────────
   /** Full URL to the product image, or null if no image uploaded */
@@ -73,6 +78,15 @@ export class UpsertAssetDto {
   isEnabled?: boolean;
   @IsOptional() @IsString()
   notes?: string;
+  @IsOptional() @IsNumber()
+  width?: number;
+  @IsOptional() @IsNumber()
+  height?: number;
+  @IsOptional() @IsNumber()
+  depth?: number;
+  @IsOptional() @IsString()
+  @IsIn(['cm', 'm'])
+  unit?: 'cm' | 'm';
 }
 
 export class PublishProductDto {

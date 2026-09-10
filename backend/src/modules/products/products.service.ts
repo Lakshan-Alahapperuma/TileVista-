@@ -35,8 +35,12 @@ export class ProductsService {
     dto.brand = osposItem.brand ?? null;
     dto.color = osposItem.color ?? null;
 
-    // 1. Map OSPOS Brand attribute
+    // 1. Map OSPOS Attributes (Brand, Color, Material, Size)
     dto.brand = osposItem.attributes?.['Brand'] || osposItem.attributes?.['brand'] || null;
+    dto.color = osposItem.attributes?.['Color'] || osposItem.attributes?.['color'] || null;
+    const osposSize = osposItem.attributes?.['Size'] || osposItem.attributes?.['size'] || null;
+    dto.size = osposSize;
+    dto.dimensions = null;
 
     if (dbProduct && dbProduct.product_assets) {
       const asset = dbProduct.product_assets;
@@ -53,8 +57,21 @@ export class ProductsService {
       dto.tags = asset.product_asset_tags
         ? asset.product_asset_tags.map((pat: any) => pat.tags?.tag_name).filter(Boolean)
         : [];
-      dto.material = asset.material_type || osposItem.material || null;
-      dto.finish = asset.color_family || osposItem.color || null;
+      dto.material = osposItem.attributes?.['Material'] || osposItem.attributes?.['material'] || osposItem.material || asset.material_type || null;
+      dto.finish = osposItem.attributes?.['Color'] || osposItem.attributes?.['color'] || osposItem.color || asset.color_family || null;
+      
+      if (asset.asset_sizes) {
+        dto.dimensions = {
+          width: Number(asset.asset_sizes.width || 0),
+          height: Number(asset.asset_sizes.height || 0),
+          depth: Number(asset.asset_sizes.depth || 0),
+          unit: asset.asset_sizes.unit || 'cm',
+        };
+        if (!dto.size && dto.dimensions.width && dto.dimensions.height) {
+          dto.size = `${dto.dimensions.width}x${dto.dimensions.height} ${dto.dimensions.unit}`;
+        }
+      }
+
       dto.isEnabled = dbProduct.is_active ?? true;
       dto.notes = null;
       dto.hasAssetEntry = true;
@@ -64,11 +81,26 @@ export class ProductsService {
       dto.scale = { x: 1, y: 1, z: 1 };
       dto.rotationY = 0;
       dto.tags = [];
-      dto.material = osposItem.material ?? null;
-      dto.finish = osposItem.color ?? null;
+      dto.material = osposItem.attributes?.['Material'] || osposItem.attributes?.['material'] || osposItem.material || null;
+      dto.finish = osposItem.attributes?.['Color'] || osposItem.attributes?.['color'] || osposItem.color || null;
       dto.isEnabled = false;
       dto.notes = null;
       dto.hasAssetEntry = false;
+    }
+
+    // Auto-parse size string into dimensions if asset_sizes wasn't explicitly set
+    if (!dto.dimensions && dto.size) {
+      const match = dto.size.match(/(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)/);
+      if (match) {
+        let w = parseFloat(match[1]);
+        let h = parseFloat(match[2]);
+        const unit = dto.size.toLowerCase().includes('m') && !dto.size.toLowerCase().includes('cm') && !dto.size.toLowerCase().includes('mm') ? 'm' : 'cm';
+        if (dto.size.toLowerCase().includes('mm')) {
+          w = w / 10;
+          h = h / 10;
+        }
+        dto.dimensions = { width: w, height: h, depth: 1, unit };
+      }
     }
 
     return dto;
@@ -85,6 +117,7 @@ export class ProductsService {
         include: {
           product_assets: {
             include: {
+              asset_sizes: true,
               asset_transformations: true,
               product_asset_tags: {
                 include: {
@@ -256,6 +289,7 @@ export class ProductsService {
         include: {
           product_assets: {
             include: {
+              asset_sizes: true,
               asset_transformations: true,
               product_asset_tags: {
                 include: {
@@ -350,8 +384,12 @@ export class ProductsService {
       if (item.brand) brands.add(item.brand);
       if (item.material) materials.add(item.material);
       if (item.finish) finishes.add(item.finish);
-      // Wait, UnifiedItemDto doesn't have sizes yet, but if it's in tags we could use it, 
-      // or we can just leave sizes empty for now until the size feature is fully built.
+      
+      // Category-specific rule: Only expose size filter choices for Tiles (e.g. 60x60 cm)
+      const isTileCategory = item.category.toLowerCase().includes('tile') || item.categoryId === 1;
+      if (isTileCategory && item.size) {
+        sizes.add(item.size);
+      }
     });
 
     return {
@@ -434,6 +472,37 @@ export class ProductsService {
           }
         }
       });
+    }
+
+    // Process asset_sizes if dimensions are specified
+    if ((dto.width !== undefined || dto.height !== undefined || dto.depth !== undefined || dto.unit !== undefined) && product.product_assets) {
+      const assetId = product.product_assets.asset_id;
+      const existingSize = await this.prisma.asset_sizes.findUnique({
+        where: { asset_id: assetId }
+      });
+
+      if (existingSize) {
+        await this.prisma.asset_sizes.update({
+          where: { asset_id: assetId },
+          data: {
+            width: dto.width !== undefined ? dto.width : undefined,
+            height: dto.height !== undefined ? dto.height : undefined,
+            depth: dto.depth !== undefined ? dto.depth : undefined,
+            unit: dto.unit ? (dto.unit === 'm' ? 'm' : 'cm') : undefined,
+          }
+        });
+      } else {
+        await this.prisma.asset_sizes.create({
+          data: {
+            size_id: crypto.randomUUID(),
+            asset_id: assetId,
+            width: dto.width ?? 0,
+            height: dto.height ?? 0,
+            depth: dto.depth ?? 0,
+            unit: dto.unit === 'm' ? 'm' : 'cm',
+          }
+        });
+      }
     }
 
     // Process tags relations if specified

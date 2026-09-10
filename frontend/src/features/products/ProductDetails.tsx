@@ -8,6 +8,7 @@ import { useProduct } from './hooks/useProduct';
 import { formatLKR, getBrand, getFallbackImage, getProductSlug } from './utils';
 import { STATIC_BASE } from './constants';
 import { useCart } from '../cart/hooks/useCart';
+import { ProductCard } from './components/ProductCard';
 
 interface ProductDetailsProps {
   id: number | null;
@@ -96,38 +97,20 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ id, slug }) => {
   const isLowStock = stockLevel > 0 && stockLevel <= 10;
 
   return (
-    <div className="py-6 font-sans max-w-7xl mx-auto px-4 md:px-8 space-y-16 selection:bg-[#D4C5B9] selection:text-[#1A1A1A]">
+    <div className="py-12 font-sans max-w-7xl mx-auto px-4 md:px-8 space-y-16 selection:bg-[#D4C5B9] selection:text-[#1A1A1A]">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
         <div className="lg:col-span-7">
-          <div className="relative w-full aspect-[4/3] bg-[#F9F9F7] border border-gray-100 overflow-hidden flex items-center justify-center">
-            <div
-              className="w-full h-full bg-cover bg-center transition-transform duration-700 hover:scale-105"
-              style={{ backgroundImage: `url('${productImageUrl}')` }}
+          <div className="relative w-full aspect-[4/3] bg-[#F9F9F7] border border-gray-100 overflow-hidden flex items-center justify-center p-6">
+            <img
+              src={productImageUrl}
+              alt={product.name}
+              className="max-w-full max-h-full object-contain transition-transform duration-700 hover:scale-105"
             />
-
-            <span className="absolute top-5 left-5 z-10 bg-white/95 text-[#1A1A1A] font-bold text-[8px] uppercase tracking-widest px-3 py-1.5 shadow-sm border border-gray-100">
-              {product.category}
-            </span>
           </div>
         </div>
 
         <div className="lg:col-span-5 flex flex-col gap-5">
           <div className="space-y-3">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-[10px] font-bold tracking-[0.25em] text-[#D4C5B9] uppercase">
-                {getBrand(product)}
-              </span>
-              {product.finish && (
-                <span className="text-[9px] font-mono tracking-widest bg-gray-50 border border-gray-200 px-2 py-0.5 text-gray-500 uppercase">
-                  {product.finish}
-                </span>
-              )}
-              {product.material && (
-                <span className="text-[9px] font-mono tracking-widest bg-gray-50 border border-gray-200 px-2 py-0.5 text-gray-500 uppercase font-semibold">
-                  {product.material}
-                </span>
-              )}
-            </div>
 
             <h1 className="text-2xl md:text-3xl font-semibold text-[#1A1A1A] tracking-tight leading-tight">
               {product.name}
@@ -138,7 +121,32 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ id, slug }) => {
             </p>
           </div>
 
-          <hr className="border-gray-100 w-full" />
+          {/* Product Specifications Grid */}
+          <div className="bg-[#F9F9F7] border border-gray-200/80 p-4 rounded-sm space-y-3">
+            <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Brand</span>
+                <span className="font-semibold text-[#1A1A1A] mt-0.5">{getBrand(product) || 'Standard'}</span>
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Material</span>
+                <span className="font-semibold text-[#1A1A1A] mt-0.5">{product.material || 'Premium Ceramic / Porcelain'}</span>
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Colour / Finish</span>
+                <span className="font-semibold text-[#1A1A1A] mt-0.5">{product.finish || 'Standard Finish'}</span>
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Size / Dimensions</span>
+                <span className="font-semibold text-[#1A1A1A] mt-0.5 font-mono">
+                  {product.size || (product.dimensions?.width && product.dimensions?.height ? `${product.dimensions.width}x${product.dimensions.height} ${product.dimensions.unit}` : 'Standard Size')}
+                </span>
+              </div>
+            </div>
+          </div>
 
           <div className="space-y-1">
             <span className="text-3xl md:text-4xl font-extrabold text-[#C8102E] tracking-tight block">
@@ -146,9 +154,18 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ id, slug }) => {
             </span>
           </div>
 
-          <div className="inline-flex items-center gap-2 border border-gray-200 px-3 py-2 bg-[#F9F9F7] self-start">
-            <span className="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Product Code:</span>
-            <span className="text-xs font-mono font-bold text-[#1A1A1A] tracking-wider">{product.sku}</span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="inline-flex items-center gap-2 border border-gray-200 px-3 py-2 bg-[#F9F9F7]">
+              <span className="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Product Code:</span>
+              <span className="text-xs font-mono font-bold text-[#1A1A1A] tracking-wider">{product.sku}</span>
+            </div>
+
+            <div className={`inline-flex items-center gap-2 border px-3 py-2 ${isOutOfStock ? 'bg-red-50 border-red-200 text-red-700' : isLowStock ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
+              <span className="w-2 h-2 rounded-full animate-pulse bg-current"></span>
+              <span className="text-xs font-mono font-bold tracking-wider">
+                {isOutOfStock ? 'Out of Stock' : `${stockLevel} Items Available`}
+              </span>
+            </div>
           </div>
 
           <hr className="border-gray-100 w-full" />
@@ -242,38 +259,10 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ id, slug }) => {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {relatedItems.map((item) => {
-              const itemImage = item.imageUrl ? `${STATIC_BASE}${item.imageUrl}` : getFallbackImage(item.category);
-              return (
-                <div
-                  key={item.itemId}
-                  className="flex flex-col bg-white border border-gray-100 hover:border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 group cursor-pointer"
-                  onClick={() => router.push(`/products/${getProductSlug(item)}`)}
-                >
-                  <div className="relative w-full aspect-square bg-[#F9F9F7] overflow-hidden">
-                    <div
-                      className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
-                      style={{ backgroundImage: `url('${itemImage}')` }}
-                    />
-                  </div>
-
-                  <div className="p-5 flex items-center justify-between gap-4">
-                    <div className="flex flex-col flex-1 min-w-0">
-                      <h3 className="text-sm font-semibold text-[#1A1A1A] tracking-wide line-clamp-1 group-hover:text-[#D4C5B9] transition-colors">
-                        {item.name}
-                      </h3>
-                      <div className="flex items-baseline gap-2 mt-1.5">
-                        <span className="text-sm font-bold text-[#C8102E]">{formatLKR(item.price)}</span>
-                      </div>
-                    </div>
-                    <div className="w-8 h-8 border border-gray-200 flex items-center justify-center flex-shrink-0 group-hover:bg-[#1A1A1A] group-hover:text-white group-hover:border-[#1A1A1A] transition-all duration-300">
-                      <Eye size={13} />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {relatedItems.map((item) => (
+              <ProductCard key={item.itemId} product={item} />
+            ))}
           </div>
         </div>
       )}

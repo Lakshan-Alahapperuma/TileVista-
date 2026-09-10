@@ -13,8 +13,11 @@ export interface UnifiedItem {
   scale: { x: number; y: number; z: number };
   rotationY: number;
   tags: string[];
+  brand?: string | null;
   material: string | null;
   finish: string | null;
+  size?: string | null;
+  dimensions?: { width: number; height: number; depth: number; unit: string } | null;
   isEnabled: boolean;
 }
 

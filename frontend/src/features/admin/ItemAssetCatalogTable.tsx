@@ -37,6 +37,8 @@ interface UnifiedItem {
   tags: string[];
   material: string | null;
   finish: string | null;
+  size?: string | null;
+  dimensions?: { width: number; height: number; depth: number; unit: string } | null;
   isEnabled: boolean;
   notes: string | null;
   hasAssetEntry: boolean;
@@ -67,6 +69,10 @@ export const ItemAssetCatalogTable: React.FC = () => {
   const [scaleY, setScaleY] = useState<number>(1);
   const [scaleZ, setScaleZ] = useState<number>(1);
   const [rotationY, setRotationY] = useState<number>(0);
+  const [width, setWidth] = useState<number>(60);
+  const [height, setHeight] = useState<number>(60);
+  const [depth, setDepth] = useState<number>(1);
+  const [unit, setUnit] = useState<'cm' | 'm'>('cm');
   const [tagsInput, setTagsInput] = useState<string>('');
   const [material, setMaterial] = useState<string>('');
   const [finish, setFinish] = useState<string>('');
@@ -117,8 +123,37 @@ export const ItemAssetCatalogTable: React.FC = () => {
     setScaleY(item.scale?.y ?? 1);
     setScaleZ(item.scale?.z ?? 1);
     setRotationY(item.rotationY ?? 0);
+
+    // Auto-fill default size from item.dimensions, item.size string, or standard 60x60 cm default
+    let defaultW = 60;
+    let defaultH = 60;
+    let defaultD = 1;
+    let defaultUnit: 'cm' | 'm' = 'cm';
+
+    if (item.dimensions?.width && item.dimensions?.height) {
+      defaultW = item.dimensions.width;
+      defaultH = item.dimensions.height;
+      defaultD = item.dimensions.depth || 1;
+      defaultUnit = (item.dimensions.unit as 'cm' | 'm') || 'cm';
+    } else if (item.size) {
+      const match = item.size.match(/(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)/);
+      if (match) {
+        defaultW = parseFloat(match[1]);
+        defaultH = parseFloat(match[2]);
+        if (item.size.toLowerCase().includes('mm')) {
+          defaultW /= 10;
+          defaultH /= 10;
+        }
+      }
+    }
+
+    setWidth(defaultW);
+    setHeight(defaultH);
+    setDepth(defaultD);
+    setUnit(defaultUnit);
+
     setTagsInput(item.tags?.join(', ') ?? '');
-    setMaterial(item.material ?? '');
+    setMaterial(item.material || (item.category.toLowerCase().includes('tile') ? 'Ceramic' : 'Porcelain'));
     setFinish(item.finish ?? '');
     setIsEnabled(item.isEnabled ?? true);
     setNotes(item.notes ?? '');
@@ -149,6 +184,10 @@ export const ItemAssetCatalogTable: React.FC = () => {
           scaleY,
           scaleZ,
           rotationY,
+          width,
+          height,
+          depth,
+          unit,
           tags: tagsInput,
           material: material || null,
           finish: finish || null,
@@ -614,6 +653,53 @@ export const ItemAssetCatalogTable: React.FC = () => {
                       className="w-full bg-[#F9F9F7] border border-gray-200 px-3 py-2 text-xs text-[#1A1A1A] focus:outline-none focus:border-[#D4C5B9] font-mono"
                       value={scaleZ}
                       onChange={(e) => setScaleZ(parseFloat(e.target.value) || 0)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Physical 3D Bounding Dimensions */}
+              <div className="bg-[#F9F9F7] p-3 border border-gray-200/80 rounded-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[10px] font-bold tracking-widest text-[#1A1A1A] uppercase block">Physical Room Dimensions (Virtual Designer)</label>
+                  <select
+                    className="bg-white border border-gray-200 px-2 py-0.5 text-[10px] text-[#1A1A1A] font-bold uppercase"
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value as 'cm' | 'm')}
+                  >
+                    <option value="cm">cm (centimeters)</option>
+                    <option value="m">m (meters)</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Width ({unit})</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      className="w-full bg-white border border-gray-200 px-2.5 py-1.5 text-xs text-[#1A1A1A] font-mono"
+                      value={width}
+                      onChange={(e) => setWidth(parseFloat(e.target.value) || 0)}
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Height ({unit})</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      className="w-full bg-white border border-gray-200 px-2.5 py-1.5 text-xs text-[#1A1A1A] font-mono"
+                      value={height}
+                      onChange={(e) => setHeight(parseFloat(e.target.value) || 0)}
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Thickness ({unit})</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      className="w-full bg-white border border-gray-200 px-2.5 py-1.5 text-xs text-[#1A1A1A] font-mono"
+                      value={depth}
+                      onChange={(e) => setDepth(parseFloat(e.target.value) || 0)}
                     />
                   </div>
                 </div>
