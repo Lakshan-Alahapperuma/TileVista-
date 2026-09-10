@@ -918,6 +918,22 @@ export const renderDoorIcon = (style: string) => {
           <rect x="36" y="8" width="14" height="44" fill="#e0f2fe" stroke="#38bdf8" strokeWidth="1" />
         </svg>
       );
+    case 'bathroom_window':
+      return (
+        <svg viewBox="0 0 40 40" className="w-10 h-10 text-emerald-700" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="6" y="6" width="28" height="28" rx="2" fill="#f4f4f5" stroke="#10b981" strokeWidth="2" />
+          <rect x="10" y="10" width="20" height="20" fill="#ccfbf1" stroke="#0d9488" strokeWidth="1" />
+          <line x1="20" y1="10" x2="20" y2="30" stroke="#0d9488" strokeWidth="1" />
+          <line x1="10" y1="20" x2="30" y2="20" stroke="#0d9488" strokeWidth="1" />
+        </svg>
+      );
+    case 'small_window':
+      return (
+        <svg viewBox="0 0 40 40" className="w-10 h-10 text-gray-700" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="6" y="10" width="28" height="20" rx="1" fill="#fcfcfc" />
+          <rect x="10" y="14" width="20" height="12" fill="#e0f2fe" stroke="#38bdf8" strokeWidth="1" />
+        </svg>
+      );
     case 'standard_window':
       return (
         <svg viewBox="0 0 40 40" className="w-10 h-10 text-gray-700" fill="none" stroke="currentColor" strokeWidth="2">
@@ -965,6 +981,8 @@ export const DOOR_STYLES = [
 ];
 
 export const WINDOW_STYLES = [
+  { id: 'bathroom_window', name: 'Bathroom Privacy Window', width: 0.6, height: 0.6, sillHeight: 1.6 },
+  { id: 'small_window', name: 'Small Awning Window', width: 0.8, height: 0.6, sillHeight: 1.5 },
   { id: 'standard_window', name: 'Standard Window', width: 1.0, height: 1.2, sillHeight: 0.9 },
   { id: 'double_window', name: 'Double Window', width: 1.6, height: 1.2, sillHeight: 0.9 },
   { id: 'large_window', name: 'Large Glass Window', width: 2.0, height: 1.8, sillHeight: 0.3 },
@@ -2367,6 +2385,7 @@ function BathroomScene({
   setMeasureStartPoint,
   measureTempEndPoint,
   setMeasureTempEndPoint,
+  readOnly = false,
 }: {
   state: DesignState;
   setState: React.Dispatch<React.SetStateAction<DesignState>>;
@@ -2378,6 +2397,7 @@ function BathroomScene({
   setNumWalls: (n: number) => void;
   placedItems: PlacedItem[];
   setPlacedItems: React.Dispatch<React.SetStateAction<PlacedItem[]>>;
+  readOnly?: boolean;
   selectedItemId: string | null;
   setSelectedItemId: (s: string | null) => void;
   isPlacingItem: PlacedItem | null;
@@ -2684,7 +2704,7 @@ function BathroomScene({
           const ux = pt.x - w.p1[0];
           const uz = pt.z - w.p1[1];
           const wallLenSq = w.len * w.len;
-          const t = Math.max(0.1, Math.min(0.9, wallLenSq > 0 ? (ux * dx + uz * dz) / wallLenSq : 0));
+          const t = Math.max(0, Math.min(1, wallLenSq > 0 ? (ux * dx + uz * dz) / wallLenSq : 0));
           const projX = w.p1[0] + t * dx;
           const projZ = w.p1[1] + t * dz;
           const dist = Math.hypot(pt.x - projX, pt.z - projZ);
@@ -2696,9 +2716,15 @@ function BathroomScene({
         });
 
         const closestWall = walls[closestWallIdx];
-        const min = op.width / 2 + 0.1;
-        const max = closestWall.len - op.width / 2 - 0.1;
-        const clamped = Math.max(min, Math.min(max, closestOffset));
+        const halfW = op.width / 2;
+        const min = halfW + 0.02;
+        const max = closestWall.len - halfW - 0.02;
+        let clamped = closestOffset;
+        if (max > min) {
+          clamped = Math.max(min, Math.min(max, closestOffset));
+        } else {
+          clamped = Math.max(halfW, Math.min(closestWall.len - halfW, closestOffset));
+        }
 
         setState(prev => ({
           ...prev,
@@ -3274,7 +3300,9 @@ function BathroomScene({
                   const hitPoint = e.point;
                   const proj = (hitPoint.x - wall.p1[0]) * (dx / wall.len) + (hitPoint.z - wall.p1[1]) * (dz / wall.len);
                   const halfW = activePlacement.width / 2;
-                  const clamped = Math.max(halfW + 0.1, Math.min(wall.len - halfW - 0.1, proj));
+                  const min = halfW + 0.02;
+                  const max = wall.len - halfW - 0.02;
+                  const clamped = max > min ? Math.max(min, Math.min(max, proj)) : Math.max(halfW, Math.min(wall.len - halfW, proj));
                   setHoveredWall({ idx: i, offset: clamped });
                 }}
                 onPointerOut={() => {
@@ -3287,7 +3315,9 @@ function BathroomScene({
                   const hitPoint = e.point;
                   const proj = (hitPoint.x - wall.p1[0]) * (dx / wall.len) + (hitPoint.z - wall.p1[1]) * (dz / wall.len);
                   const halfW = activePlacement.width / 2;
-                  const clamped = Math.max(halfW + 0.1, Math.min(wall.len - halfW - 0.1, proj));
+                  const min = halfW + 0.02;
+                  const max = wall.len - halfW - 0.02;
+                  const clamped = max > min ? Math.max(min, Math.min(max, proj)) : Math.max(halfW, Math.min(wall.len - halfW, proj));
 
                   setState(prev => ({
                     ...prev,
@@ -3422,7 +3452,7 @@ function BathroomScene({
 
       {/* Placed items */}
       {placedItems.map(item => {
-        const isSelected = selectedItemId === item.id;
+        const isSelected = !readOnly && selectedItemId === item.id;
         return (
           <group
             key={item.id}
@@ -3430,27 +3460,33 @@ function BathroomScene({
             rotation={[0, item.rotation, 0]}
             scale={[0.3048, 0.3048, 0.3048]}
             onPointerDown={(e) => {
+              if (readOnly) return;
               e.stopPropagation();
               draggingItemId.current = item.id;
               setOrbitEnabled(false);
             }}
             onDoubleClick={(e) => {
+              if (readOnly) return;
               e.stopPropagation();
               setSelectedItemId(item.id);
             }}
           >
-            {item.type === 'sink' && <SinkModel selected={isSelected} />}
-            {item.type === 'bathtub' && <BathtubModel selected={isSelected} />}
-            {item.type === 'shower' && <ShowerModel selected={isSelected} />}
-            {item.type === 'toilet' && <ToiletModel selected={isSelected} />}
-            {item.type === 'towel_rail' && <TowelRailModel selected={isSelected} />}
-            {item.type === 'washing_machine' && <WashingMachineModel selected={isSelected} />}
-            {item.type === 'light' && <WallLightModel selected={isSelected} />}
-            {item.type === 'plant' && <PlantModel selected={isSelected} />}
-
-            {/* Dynamic Furniture Models (fallback to 2D image) */}
-            {!['sink', 'bathtub', 'shower', 'toilet', 'towel_rail', 'washing_machine', 'light', 'plant'].includes(item.type) && (
+            {item.model ? (
               <DynamicFurnitureModel item={item} selected={isSelected} CustomFurniture={CustomFurniture} />
+            ) : (
+              <>
+                {item.type === 'sink' && <SinkModel selected={isSelected} />}
+                {item.type === 'bathtub' && <BathtubModel selected={isSelected} />}
+                {item.type === 'shower' && <ShowerModel selected={isSelected} />}
+                {item.type === 'toilet' && <ToiletModel selected={isSelected} />}
+                {item.type === 'towel_rail' && <TowelRailModel selected={isSelected} />}
+                {item.type === 'washing_machine' && <WashingMachineModel selected={isSelected} />}
+                {item.type === 'light' && <WallLightModel selected={isSelected} />}
+                {item.type === 'plant' && <PlantModel selected={isSelected} />}
+                {!['sink', 'bathtub', 'shower', 'toilet', 'towel_rail', 'washing_machine', 'light', 'plant'].includes(item.type) && (
+                  <DynamicFurnitureModel item={item} selected={isSelected} CustomFurniture={CustomFurniture} />
+                )}
+              </>
             )}
           </group>
         );
@@ -3987,6 +4023,7 @@ function RoomPreview3D({
   setMeasureStartPoint,
   measureTempEndPoint,
   setMeasureTempEndPoint,
+  readOnly = false,
 }: {
   shape: RoomShape;
   width: number;
@@ -4017,6 +4054,7 @@ function RoomPreview3D({
   setMeasureStartPoint?: (p: THREE.Vector3 | null) => void;
   measureTempEndPoint?: THREE.Vector3 | null;
   setMeasureTempEndPoint?: (p: THREE.Vector3 | null) => void;
+  readOnly?: boolean;
 }) {
   const ref = useRef<THREE.Group>(null);
   const { camera, gl } = useThree();
@@ -4528,7 +4566,11 @@ function RoomPreview3D({
             onPointerDown={(e) => {
               if (!showOpeningsEditor) return;
               e.stopPropagation();
-              (e.target as any).setPointerCapture(e.pointerId);
+              try {
+                if (e.nativeEvent?.target && 'setPointerCapture' in (e.nativeEvent.target as any)) {
+                  (e.nativeEvent.target as any).setPointerCapture(e.pointerId);
+                }
+              } catch (_) {}
               setDraggingOpeningId(opening.id);
               onStartDrag();
             }}
@@ -4547,7 +4589,7 @@ function RoomPreview3D({
                     const ux = hit.x - w.p1[0];
                     const uz = hit.z - w.p1[1];
                     const wallLenSq = w.len * w.len;
-                    const t = Math.max(0.1, Math.min(0.9, wallLenSq > 0 ? (ux * dx + uz * dz) / wallLenSq : 0));
+                    const t = Math.max(0, Math.min(1, wallLenSq > 0 ? (ux * dx + uz * dz) / wallLenSq : 0));
                     const projX = w.p1[0] + t * dx;
                     const projZ = w.p1[1] + t * dz;
                     const dist = Math.hypot(hit.x - projX, hit.z - projZ);
@@ -4559,9 +4601,15 @@ function RoomPreview3D({
                   });
 
                   const closestWall = walls[closestWallIdx];
-                  const min = opening.width / 2 + 0.1;
-                  const max = closestWall.len - opening.width / 2 - 0.1;
-                  const clamped = Math.max(min, Math.min(max, closestOffset));
+                  const halfW = opening.width / 2;
+                  const min = halfW + 0.02;
+                  const max = closestWall.len - halfW - 0.02;
+                  let clamped = closestOffset;
+                  if (max > min) {
+                    clamped = Math.max(min, Math.min(max, closestOffset));
+                  } else {
+                    clamped = Math.max(halfW, Math.min(closestWall.len - halfW, closestOffset));
+                  }
                   onUpdateWallOpeningOffset(opening.id, clamped, closestWallIdx);
                 }
               }
@@ -4569,7 +4617,11 @@ function RoomPreview3D({
             onPointerUp={(e) => {
               if (draggingOpeningId === opening.id) {
                 e.stopPropagation();
-                (e.target as any).releasePointerCapture(e.pointerId);
+                try {
+                  if (e.nativeEvent?.target && 'releasePointerCapture' in (e.nativeEvent.target as any)) {
+                    (e.nativeEvent.target as any).releasePointerCapture(e.pointerId);
+                  }
+                } catch (_) {}
                 setDraggingOpeningId(null);
                 onEndDrag();
               }
@@ -4590,7 +4642,11 @@ function RoomPreview3D({
                       }`}
                     onPointerDown={(e) => {
                       e.stopPropagation();
-                      (e.target as any).setPointerCapture(e.pointerId);
+                      try {
+                        if (e.target && 'setPointerCapture' in (e.target as any)) {
+                          (e.target as any).setPointerCapture(e.pointerId);
+                        }
+                      } catch (_) {}
                       setDraggingOpeningId(opening.id);
                       onStartDrag();
                     }}
@@ -4609,7 +4665,7 @@ function RoomPreview3D({
                             const ux = hit.x - w.p1[0];
                             const uz = hit.z - w.p1[1];
                             const wallLenSq = w.len * w.len;
-                            const t = Math.max(0.1, Math.min(0.9, wallLenSq > 0 ? (ux * dx + uz * dz) / wallLenSq : 0));
+                            const t = Math.max(0, Math.min(1, wallLenSq > 0 ? (ux * dx + uz * dz) / wallLenSq : 0));
                             const projX = w.p1[0] + t * dx;
                             const projZ = w.p1[1] + t * dz;
                             const dist = Math.hypot(hit.x - projX, hit.z - projZ);
@@ -4621,9 +4677,15 @@ function RoomPreview3D({
                           });
 
                           const closestWall = walls[closestWallIdx];
-                          const min = opening.width / 2 + 0.1;
-                          const max = closestWall.len - opening.width / 2 - 0.1;
-                          const clamped = Math.max(min, Math.min(max, closestOffset));
+                          const halfW = opening.width / 2;
+                          const min = halfW + 0.02;
+                          const max = closestWall.len - halfW - 0.02;
+                          let clamped = closestOffset;
+                          if (max > min) {
+                            clamped = Math.max(min, Math.min(max, closestOffset));
+                          } else {
+                            clamped = Math.max(halfW, Math.min(closestWall.len - halfW, closestOffset));
+                          }
                           onUpdateWallOpeningOffset(opening.id, clamped, closestWallIdx);
                         }
                       }
@@ -4631,7 +4693,11 @@ function RoomPreview3D({
                     onPointerUp={(e) => {
                       if (draggingOpeningId === opening.id) {
                         e.stopPropagation();
-                        (e.target as any).releasePointerCapture(e.pointerId);
+                        try {
+                          if (e.target && 'releasePointerCapture' in (e.target as any)) {
+                            (e.target as any).releasePointerCapture(e.pointerId);
+                          }
+                        } catch (_) {}
                         setDraggingOpeningId(null);
                         onEndDrag();
                       }
@@ -4641,20 +4707,42 @@ function RoomPreview3D({
                   </div>
                 </Html>
 
-                {/* Delete button */}
+                {/* Delete & Resize buttons */}
                 <Html position={[0, opening.height + 0.25, 0.05]} center distanceFactor={10}>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveWallOpening(opening.id);
-                    }}
-                    className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-all border border-white/20 hover:scale-105"
-                    title="Delete element"
-                  >
-                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    </svg>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {opening.type === 'door' && (selectedRoomType === 'bathroom' || useDesignerStore.getState().state.designType === 'bathroom') && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          useDesignerStore.getState().setDoorSizeModal({
+                            isOpen: true,
+                            target: 'existing',
+                            openingId: opening.id,
+                            doorStyle: opening.style,
+                            doorName: opening.name || 'Door',
+                            currentWidth: opening.width,
+                            currentHeight: opening.height,
+                          });
+                        }}
+                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full flex items-center gap-1 shadow-lg transition-all border border-white/20 hover:scale-105 text-[9px] font-bold uppercase tracking-wider select-none whitespace-nowrap"
+                        title="Resize Door"
+                      >
+                        <span>📐</span> Resize
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveWallOpening(opening.id);
+                      }}
+                      className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-all border border-white/20 hover:scale-105"
+                      title="Delete element"
+                    >
+                      <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  </div>
                 </Html>
               </>
             )}
@@ -4709,14 +4797,22 @@ function RoomPreview3D({
                 if (rotate || isDraggingSomething) return;
                 if (!showResizing) return;
                 e.stopPropagation();
-                (e.target as any).setPointerCapture(e.pointerId);
+                try {
+                  if (e.nativeEvent?.target && 'setPointerCapture' in (e.nativeEvent.target as any)) {
+                    (e.nativeEvent.target as any).setPointerCapture(e.pointerId);
+                  }
+                } catch (_) {}
                 setDraggingWallIdx(idx);
                 onStartDrag();
               }}
               onPointerUp={(e) => {
                 if (draggingWallIdx === idx) {
                   e.stopPropagation();
-                  (e.target as any).releasePointerCapture(e.pointerId);
+                  try {
+                    if (e.nativeEvent?.target && 'releasePointerCapture' in (e.nativeEvent.target as any)) {
+                      (e.nativeEvent.target as any).releasePointerCapture(e.pointerId);
+                    }
+                  } catch (_) {}
                   setDraggingWallIdx(null);
                   onEndDrag();
                 }
@@ -4729,7 +4825,9 @@ function RoomPreview3D({
                   const hitPoint = e.point;
                   const proj = (hitPoint.x - wall.p1[0]) * (dx / wall.len) + (hitPoint.z - wall.p1[1]) * (dz / wall.len);
                   const halfW = activePlacement.width / 2;
-                  const clamped = Math.max(halfW + 0.1, Math.min(wall.len - halfW - 0.1, proj));
+                  const min = halfW + 0.02;
+                  const max = wall.len - halfW - 0.02;
+                  const clamped = max > min ? Math.max(min, Math.min(max, proj)) : Math.max(halfW, Math.min(wall.len - halfW, proj));
                   setHoveredWall({ idx, offset: clamped });
                 }
               }}
@@ -4744,7 +4842,9 @@ function RoomPreview3D({
                   const hitPoint = e.point;
                   const proj = (hitPoint.x - wall.p1[0]) * (dx / wall.len) + (hitPoint.z - wall.p1[1]) * (dz / wall.len);
                   const halfW = activePlacement.width / 2;
-                  const clamped = Math.max(halfW + 0.1, Math.min(wall.len - halfW - 0.1, proj));
+                  const min = halfW + 0.02;
+                  const max = wall.len - halfW - 0.02;
+                  const clamped = max > min ? Math.max(min, Math.min(max, proj)) : Math.max(halfW, Math.min(wall.len - halfW, proj));
 
                   onAddWallOpening({
                     id: `opening_${Date.now()}`,
@@ -4827,7 +4927,7 @@ function RoomPreview3D({
 
       {/* Placed items inside RoomPreview3D */}
       {placedItems && placedItems.map((item: any) => {
-        const isSelected = selectedItemId === item.id;
+        const isSelected = !readOnly && selectedItemId === item.id;
         return (
           <group
             key={item.id}
@@ -4835,26 +4935,33 @@ function RoomPreview3D({
             rotation={[0, item.rotation, 0]}
             scale={[0.3048, 0.3048, 0.3048]}
             onPointerDown={(e) => {
+              if (readOnly) return;
               e.stopPropagation();
               draggingItemIdRef.current = item.id;
               if (onStartDrag) onStartDrag();
             }}
             onDoubleClick={(e) => {
+              if (readOnly) return;
               e.stopPropagation();
               if (setSelectedItemId) setSelectedItemId(item.id);
             }}
           >
-            {item.type === 'sink' && <SinkModel selected={isSelected} />}
-            {item.type === 'bathtub' && <BathtubModel selected={isSelected} />}
-            {item.type === 'shower' && <ShowerModel selected={isSelected} />}
-            {item.type === 'toilet' && <ToiletModel selected={isSelected} />}
-            {item.type === 'towel_rail' && <TowelRailModel selected={isSelected} />}
-            {item.type === 'washing_machine' && <WashingMachineModel selected={isSelected} />}
-            {item.type === 'light' && <WallLightModel selected={isSelected} />}
-
-            {/* Dynamic Furniture Models (fallback to 2D image) */}
-            {!['sink', 'bathtub', 'shower', 'toilet', 'towel_rail', 'washing_machine', 'light', 'plant'].includes(item.type) && (
+            {item.model ? (
               <DynamicFurnitureModel item={item} selected={isSelected} CustomFurniture={CustomFurniture} />
+            ) : (
+              <>
+                {item.type === 'sink' && <SinkModel selected={isSelected} />}
+                {item.type === 'bathtub' && <BathtubModel selected={isSelected} />}
+                {item.type === 'shower' && <ShowerModel selected={isSelected} />}
+                {item.type === 'toilet' && <ToiletModel selected={isSelected} />}
+                {item.type === 'towel_rail' && <TowelRailModel selected={isSelected} />}
+                {item.type === 'washing_machine' && <WashingMachineModel selected={isSelected} />}
+                {item.type === 'light' && <WallLightModel selected={isSelected} />}
+                {item.type === 'plant' && <PlantModel selected={isSelected} />}
+                {!['sink', 'bathtub', 'shower', 'toilet', 'towel_rail', 'washing_machine', 'light', 'plant'].includes(item.type) && (
+                  <DynamicFurnitureModel item={item} selected={isSelected} CustomFurniture={CustomFurniture} />
+                )}
+              </>
             )}
           </group>
         );
@@ -4920,13 +5027,14 @@ const MemoizedCanvas = React.memo(({
   setMeasureStartPoint,
   measureTempEndPoint,
   setMeasureTempEndPoint,
-  activeCategory
+  activeCategory,
+  readOnly = false
 }: any) => {
   return (
     <div className={`h-full overflow-hidden transition-all duration-300 ${activeCategory === 'bathware_products' ? 'w-[calc(100%-420px)] flex-none' : 'flex-1 w-full'}`}>
       <Canvas
         camera={{ position: [6, 5, 8], fov: 45 }}
-        gl={{ antialias: true, alpha: false }}
+        gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
         style={{ width: '100%', height: '100%' }}
         shadows
       >
@@ -4961,6 +5069,7 @@ const MemoizedCanvas = React.memo(({
             setMeasureStartPoint={setMeasureStartPoint}
             measureTempEndPoint={measureTempEndPoint}
             setMeasureTempEndPoint={setMeasureTempEndPoint}
+            readOnly={readOnly}
           />
         </Suspense>
       </Canvas>
@@ -4969,12 +5078,217 @@ const MemoizedCanvas = React.memo(({
 });
 MemoizedCanvas.displayName = 'MemoizedCanvas';
 
-// ─── SUMMARY MODAL ───────────────────────────────────────────────────────────
+// ─── DOOR & WINDOW SIZE MODAL ──────────────────────────────────────────────────────────
 
-function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { catalog: any[], categories: any[], CustomFurniture?: any }) {
+function DoorSizeModalComponent() {
+  const {
+    doorSizeModal, setDoorSizeModal,
+    setActivePlacement, setState, setWizardWallOpenings,
+    activeCategory, setActiveCategory, selectedRoomType, state
+  } = useDesignerStore();
+
+  const [widthInput, setWidthInput] = useState<string>('');
+  const [heightInput, setHeightInput] = useState<string>('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (doorSizeModal?.isOpen) {
+      setWidthInput(String(doorSizeModal.currentWidth));
+      setHeightInput(String(doorSizeModal.currentHeight));
+      setErrorMsg(null);
+    }
+  }, [doorSizeModal]);
+
+  if (!doorSizeModal?.isOpen) return null;
+
+  const isWindow = doorSizeModal.openingType === 'window' || doorSizeModal.doorStyle?.includes('window');
+
+  const handleApply = (customW?: number, customH?: number) => {
+    const w = customW !== undefined ? customW : parseFloat(widthInput);
+    const h = customH !== undefined ? customH : parseFloat(heightInput);
+
+    if (isNaN(w) || w < 0.3 || w > 3.5) {
+      setErrorMsg('Width must be between 0.3m and 3.5m');
+      return;
+    }
+    if (isNaN(h) || h < 0.3 || h > 3.5) {
+      setErrorMsg('Height must be between 0.3m and 3.5m');
+      return;
+    }
+
+    const roundedW = Math.round(w * 100) / 100;
+    const roundedH = Math.round(h * 100) / 100;
+
+    if (doorSizeModal.target === 'placement') {
+      setActivePlacement({
+        type: isWindow ? 'window' : 'door',
+        style: doorSizeModal.doorStyle || (isWindow ? 'bathroom_window' : 'single_door'),
+        name: doorSizeModal.doorName || (isWindow ? 'Window' : 'Door'),
+        width: roundedW,
+        height: roundedH,
+        sillHeight: isWindow ? 1.6 : 0,
+      });
+      if (activeCategory === 'openings') setActiveCategory(null);
+    } else if (doorSizeModal.target === 'existing' && doorSizeModal.openingId) {
+      setState(prev => ({
+        ...prev,
+        wallOpenings: prev.wallOpenings.map(op =>
+          op.id === doorSizeModal.openingId
+            ? { ...op, width: roundedW, height: roundedH }
+            : op
+        )
+      }));
+      setWizardWallOpenings(prev =>
+        prev.map(op =>
+          op.id === doorSizeModal.openingId
+            ? { ...op, width: roundedW, height: roundedH }
+            : op
+        )
+      );
+    }
+
+    setDoorSizeModal(null);
+  };
+
+  const currentWVal = parseFloat(widthInput) || 0;
+  const currentHVal = parseFloat(heightInput) || 0;
+
+  const presets = isWindow ? [
+    { label: 'Bath Privacy (0.60m × 0.60m)', w: 0.60, h: 0.60 },
+    { label: 'Small Awning (0.80m × 0.60m)', w: 0.80, h: 0.60 },
+    { label: 'Standard Window (1.00m × 1.20m)', w: 1.00, h: 1.20 },
+    { label: 'Double Window (1.60m × 1.20m)', w: 1.60, h: 1.20 },
+  ] : [
+    { label: 'Compact Bath (0.75m × 2.0m)', w: 0.75, h: 2.0 },
+    { label: 'Standard Door (0.90m × 2.0m)', w: 0.90, h: 2.0 },
+    { label: 'Wide Door (1.20m × 2.1m)', w: 1.20, h: 2.1 },
+    { label: 'Double Door (1.60m × 2.1m)', w: 1.60, h: 2.1 },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl p-6 shadow-2xl max-w-md w-full border border-gray-100 flex flex-col gap-5 animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-lg border border-emerald-200/60 shadow-sm">
+              {isWindow ? '🪟' : '🚪'}
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-[#1A1A1A] tracking-tight">
+                Specify {isWindow ? 'Window' : 'Door'} Dimensions
+              </h3>
+              <p className="text-xs text-gray-500 font-medium">
+                {doorSizeModal.doorName || (isWindow ? 'Bathroom Window' : 'Bathroom Door')}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setDoorSizeModal(null)}
+            className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-bold transition-all"
+          >
+            ✕
+          </button>
+        </div>
+
+        {errorMsg && (
+          <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-medium">
+            {errorMsg}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[11px] font-bold text-gray-600 block mb-1.5 uppercase tracking-wider">
+                Width (Meters)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0.3"
+                  max="3.5"
+                  value={widthInput}
+                  onChange={(e) => setWidthInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                />
+                <span className="absolute right-3 top-2.5 text-xs text-gray-400 font-medium">m</span>
+              </div>
+              <span className="text-[10px] text-gray-400 mt-1 block font-medium">
+                ≈ {currentWVal > 0 ? (currentWVal * 3.28084).toFixed(2) : '0'} ft
+              </span>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-gray-600 block mb-1.5 uppercase tracking-wider">
+                Height (Meters)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0.3"
+                  max="3.5"
+                  value={heightInput}
+                  onChange={(e) => setHeightInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                />
+                <span className="absolute right-3 top-2.5 text-xs text-gray-400 font-medium">m</span>
+              </div>
+              <span className="text-[10px] text-gray-400 mt-1 block font-medium">
+                ≈ {currentHVal > 0 ? (currentHVal * 3.28084).toFixed(2) : '0'} ft
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-2">
+              Quick Presets
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              {presets.map((preset, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    setWidthInput(String(preset.w));
+                    setHeightInput(String(preset.h));
+                  }}
+                  className="px-2.5 py-2 text-[11px] font-semibold border border-gray-200 rounded-xl hover:border-black hover:bg-gray-50 transition-all text-gray-700 text-left"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={() => setDoorSizeModal(null)}
+            className="px-4 py-2.5 text-xs font-bold text-gray-600 hover:text-gray-900 rounded-xl transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => handleApply()}
+            className="px-5 py-2.5 bg-black hover:bg-gray-800 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95"
+          >
+            {doorSizeModal.target === 'placement' ? `Set & Place ${isWindow ? 'Window' : 'Door'}` : `Update ${isWindow ? 'Window' : 'Door'} Size`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOnly = false }: { catalog: any[], categories: any[], CustomFurniture?: any, readOnly?: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const loadedDesignId = searchParams.get('id');
+  const loadedPackageId = searchParams.get('package');
   const [wizardCategory, setWizardCategory] = useState<string | null>(null);
   const [wizardDynamicItems, setWizardDynamicItems] = useState<any[]>([]);
   const [isWizardLoading, setIsWizardLoading] = useState(false);
@@ -4998,7 +5312,7 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
     }
   }, [wizardCategory]);
 
-  const { state, setState, topView, setTopView, activeSideView, setActiveSideView, zoomTrigger, setZoomTrigger, numWalls, setNumWalls, wizardStep, setWizardStep, fadeState, setFadeState, selectedRoomType, setSelectedRoomType, subRoomType, setSubRoomType, projectName, setProjectName, selectedShape, setSelectedShape, dimensionsUnit, setDimensionsUnit, widthInput, setWidthInput, lengthInput, setLengthInput, heightInput, setHeightInput, projectId, setProjectId, validationErrors, setValidationErrors, isSubmitting, setIsSubmitting, previewZoomTrigger, setPreviewZoomTrigger, activePlacement, setActivePlacement, wizardWallOpenings, setWizardWallOpenings, placedItems, setPlacedItems, selectedItemId, setSelectedItemId, isPlacingItem, setIsPlacingItem, activeCategory, setActiveCategory, showRoomCustomizer, setShowRoomCustomizer, showSummaryModal, setShowSummaryModal, showRoomTypeModal, setShowRoomTypeModal, orbitEnabled, setOrbitEnabled, undoStack, setUndoStack, redoStack, setRedoStack, recordHistory, handleUndo, handleRedo, alertMessage, showAlert, hideAlert } = useDesignerStore();
+  const { state, setState, topView, setTopView, activeSideView, setActiveSideView, zoomTrigger, setZoomTrigger, numWalls, setNumWalls, wizardStep, setWizardStep, fadeState, setFadeState, selectedRoomType, setSelectedRoomType, subRoomType, setSubRoomType, projectName, setProjectName, selectedShape, setSelectedShape, dimensionsUnit, setDimensionsUnit, widthInput, setWidthInput, lengthInput, setLengthInput, heightInput, setHeightInput, projectId, setProjectId, validationErrors, setValidationErrors, isSubmitting, setIsSubmitting, previewZoomTrigger, setPreviewZoomTrigger, activePlacement, setActivePlacement, wizardWallOpenings, setWizardWallOpenings, placedItems, setPlacedItems, selectedItemId, setSelectedItemId, isPlacingItem, setIsPlacingItem, activeCategory, setActiveCategory, showRoomCustomizer, setShowRoomCustomizer, showSummaryModal, setShowSummaryModal, showRoomTypeModal, setShowRoomTypeModal, orbitEnabled, setOrbitEnabled, undoStack, setUndoStack, redoStack, setRedoStack, recordHistory, handleUndo, handleRedo, alertMessage, showAlert, hideAlert, doorSizeModal, setDoorSizeModal } = useDesignerStore();
 
   // ─── MEASUREMENT TOOL STATES ───
   const [showMeasurementPanel, setShowMeasurementPanel] = useState(false);
@@ -5174,6 +5488,170 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
 
     fetchSavedDesign();
   }, [loadedDesignId]);
+
+  // Load package visual layouts dynamically from database
+  useEffect(() => {
+    if (!loadedPackageId) return;
+
+    const fetchPackageData = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+        const STATIC_BASE = apiUrl.replace('/api', '');
+
+        // 1. Fetch all unified items to resolve images and GLB URLs
+        const itemsRes = await fetch(`${apiUrl}/items?includeHidden=true`);
+        if (!itemsRes.ok) throw new Error('Failed to fetch items catalog');
+        const allItems = await itemsRes.json();
+        const itemsMap = new Map(allItems.map((item: any) => [item.itemId, item]));
+
+        // 2. Fetch the package details
+        const pkgRes = await fetch(`${apiUrl}/packages/${loadedPackageId}`);
+        if (!pkgRes.ok) throw new Error('Failed to fetch package details');
+        const pkgData = await pkgRes.json();
+
+        // Standard pre-designed bathroom dimensions: 12ft x 9ft x 8.5ft
+        const wFt = 12.0;
+        const dFt = 9.0;
+        const hFt = 8.5;
+
+        // Set dimensions inputs (matches wizard config state)
+        const loadedWidth = wFt * 0.3048;
+        const loadedLength = dFt * 0.3048;
+        const loadedHeight = hFt * 0.3048;
+
+        if (dimensionsUnit === 'cm') {
+          setWidthInput(Math.round(loadedWidth * 100).toString());
+          setLengthInput(Math.round(loadedLength * 100).toString());
+          setHeightInput(Math.round(loadedHeight * 100).toString());
+        } else {
+          setWidthInput(loadedWidth.toString());
+          setLengthInput(loadedLength.toString());
+          setHeightInput(loadedHeight.toString());
+        }
+
+        // Apply tiles
+        let floorTexUrl: string | undefined = undefined;
+        let wallTexUrl: string | undefined = undefined;
+
+        // Map items
+        const mappedItems: any[] = [];
+        let sinkCount = 0;
+        let toiletCount = 0;
+        let bathCount = 0;
+        let showerCount = 0;
+
+        pkgData.items.forEach((pi: any) => {
+          const matchedItem = itemsMap.get(pi.osposItemId) as any;
+          if (!matchedItem) return;
+
+          const category = (matchedItem.category || '').toLowerCase();
+          const name = (matchedItem.name || '').toLowerCase();
+          
+          const formatUrl = (url?: string | null) => {
+            if (!url) return undefined;
+            if (url.startsWith('http://') || url.startsWith('https://')) return url;
+            return `${STATIC_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
+          };
+
+          const isTile = category.includes('tile') || category.includes('mosaic') || name.includes('tile') || name.includes('mosaic');
+
+          if (isTile) {
+            const isFloor = [4, 6, 17, 18, 20].includes(matchedItem.itemId) || name.includes('floor') || category.includes('floor');
+            if (isFloor) {
+              floorTexUrl = formatUrl(matchedItem.imageUrl);
+            } else {
+              wallTexUrl = formatUrl(matchedItem.imageUrl);
+            }
+          } else {
+            // Determine designer item type from POS category/name
+            let type = 'sink';
+            let position: [number, number, number] = [0, 0, 0];
+            let rotation = 0;
+            let isWallMounted = false;
+
+            if (category.includes('basin') || category.includes('sink') || name.includes('basin') || name.includes('sink') || name.includes('vanity')) {
+              type = 'sink';
+              position = [-0.6 + (sinkCount * 1.2), 0, -1.0];
+              rotation = 0;
+              sinkCount++;
+            } else if (category.includes('closet') || category.includes('toilet') || category.includes('wc') || name.includes('closet') || name.includes('toilet') || name.includes('wc') || name.includes('commode')) {
+              type = 'toilet';
+              position = [-1.3, 0, -0.2 + (toiletCount * 0.8)];
+              rotation = Math.PI / 2;
+              toiletCount++;
+            } else if (category.includes('bath') || name.includes('bath') || name.includes('tub')) {
+              type = 'bathtub';
+              position = [1.1, 0, 0.2 + (bathCount * 0.9)];
+              rotation = -Math.PI / 2;
+              bathCount++;
+            } else if (category.includes('shower') || name.includes('shower')) {
+              type = 'shower';
+              position = [1.1, 0, -1.0 + (showerCount * 0.9)];
+              rotation = -Math.PI / 2;
+              showerCount++;
+            } else if (category.includes('mirror') || name.includes('mirror') || category.includes('light')) {
+              type = 'light';
+              position = [0, 1.6, -1.3];
+              rotation = 0;
+              isWallMounted = true;
+            } else {
+              type = 'plant';
+              position = [-1.3, 0, 0.8];
+              rotation = 0;
+            }
+
+            const randId = 'item_' + Math.random().toString(36).substring(2, 9);
+            mappedItems.push({
+              id: randId,
+              type,
+              name: matchedItem.name,
+              model: formatUrl(matchedItem.glbUrl) || null,
+              cost: matchedItem.price || 150.00,
+              position,
+              rotation,
+              isWallMounted
+            });
+          }
+        });
+
+        const mappedWallDesigns = Array(8).fill(null).map(() => ({
+          splitMode: 'full' as const,
+          tileColorBottom: '#ffffff',
+          tileColorTop: '#ffffff',
+          tileColorCenter: '#ffffff',
+          tileColorSides: '#ffffff',
+          textureUrl: wallTexUrl || undefined
+        }));
+
+        setState({
+          widthFt: wFt,
+          depthFt: dFt,
+          heightFt: hFt,
+          shape: 'rectangular',
+          unit: 'cm',
+          floorColor: '#ffffff',
+          floorTextureUrl: floorTexUrl || undefined,
+          wallTextureUrl: wallTexUrl || undefined,
+          wallDesigns: mappedWallDesigns,
+          designType: 'bathroom',
+          subRoomType: undefined,
+          wallOpenings: []
+        });
+
+        setWizardWallOpenings([]);
+        setPlacedItems(mappedItems);
+        setProjectName(pkgData.name || 'Curated Package Layout');
+
+        // Skip setup steps and load straight to Step 5 (Workspace Canvas)
+        setWizardStep(5);
+      } catch (err: any) {
+        console.error("Load package layout error:", err);
+        showAlert("Failed to load pre-designed package layout: " + err.message);
+      }
+    };
+
+    fetchPackageData();
+  }, [loadedPackageId]);
 
   // Sync project ID to URL query parameters for page refreshes
   useEffect(() => {
@@ -6637,7 +7115,7 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
               {wizardStep === 4 && <ProductPanel />}
               <Canvas
                 camera={wizardStep === 1 || wizardStep === 2 ? { position: [0, 4, 6], fov: 42 } : { position: [0, 6, 7], fov: 38 }}
-                gl={{ antialias: true }}
+                gl={{ antialias: true, preserveDrawingBuffer: true }}
                 style={{ width: '100%', height: '100%' }}
                 shadows={wizardStep !== 2}
               >
@@ -6747,11 +7225,11 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
 
 
       {/* ── HEADER ── */}
-      <DesignerToolbar onSave={handleSaveDesign} />
+      <DesignerToolbar onSave={handleSaveDesign} readOnly={readOnly} />
 
 
 
-      <ProductPanel />
+      <ProductPanel readOnly={readOnly} />
 
 
 
@@ -6786,6 +7264,7 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
         measureTempEndPoint={measureTempEndPoint}
         setMeasureTempEndPoint={setMeasureTempEndPoint}
         activeCategory={activeCategory}
+        readOnly={readOnly}
       />
 
 
@@ -6796,7 +7275,8 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
 
 
 
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/85 backdrop-blur-md border border-gray-200/80 shadow-2xl rounded-full px-5 py-2.5 flex items-center gap-4 z-20">
+      {!readOnly && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/85 backdrop-blur-md border border-gray-200/80 shadow-2xl rounded-full px-5 py-2.5 flex items-center gap-4 z-20">
         {/* Dollhouse view */}
         <button
           id="btn-dollhouse"
@@ -6985,12 +7465,14 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture }: { ca
           </>
         )}
       </div>
+      )}
 
 
 
 
       {/* ── SAVE DESIGN MODAL ── */}
       <SaveDesignModal />
+      <DoorSizeModalComponent />
 
 
 
@@ -7048,14 +7530,14 @@ export function ItemSidebarPreview({ item, heightClass = "h-40" }: { item: any, 
   );
 }
 
-export default function SharedDesignerEngine({ catalog, categories, CustomFurniture }: { catalog: any[], categories: any[], CustomFurniture?: any }) {
+export default function SharedDesignerEngine({ catalog, categories, CustomFurniture, readOnly = false }: { catalog: any[], categories: any[], CustomFurniture?: any, readOnly?: boolean }) {
   return (
     <Suspense fallback={
       <div className="flex h-screen w-screen items-center justify-center bg-[#FAF9F6] text-xs font-semibold text-gray-500 uppercase tracking-widest">
         Loading TileVista Planner...
       </div>
     }>
-      <BathroomPlannerPageInner catalog={catalog} categories={categories} CustomFurniture={CustomFurniture} />
+      <BathroomPlannerPageInner catalog={catalog} categories={categories} CustomFurniture={CustomFurniture} readOnly={readOnly} />
     </Suspense>
   );
 }

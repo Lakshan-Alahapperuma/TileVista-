@@ -2,7 +2,9 @@ import React from 'react';
 import { Menu, ArrowLeft } from 'lucide-react';
 import { useDesignerStore } from '../../store/designer.store';
 
-export default function DesignerToolbar({ onSave }: { onSave: () => Promise<void> }) {
+export default function DesignerToolbar({ onSave, readOnly = false }: { onSave: () => Promise<void>, readOnly?: boolean }) {
+  if (readOnly) return null;
+
   const store = useDesignerStore();
   
   const totalPrice = store.placedItems.reduce((acc, item) => acc + (item.cost || 0), 0);

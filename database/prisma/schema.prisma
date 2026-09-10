@@ -361,23 +361,24 @@ model user_addresses {
 }
 
 model users {
-  user_id              String                 @id @db.Char(36)
-  first_name           String                 @db.VarChar(100)
-  last_name            String                 @db.VarChar(100)
-  email                String                 @unique(map: "email") @db.VarChar(150)
-  phone                String?                @db.VarChar(20)
-  password_hash        String                 @db.VarChar(255)
-  role                 users_role             @default(customer)
-  status               users_status           @default(active)
-  created_at           DateTime?              @default(now()) @db.DateTime(0)
-  updated_at           DateTime?              @default(now()) @db.DateTime(0)
-  admin_logs           admin_logs[]
-  carts                carts[]
-  notifications        notifications[]
-  order_status_history order_status_history[]
-  orders               orders[]
-  room_designs         room_designs[]
-  user_addresses       user_addresses[]
+  user_id                 String                   @id @db.Char(36)
+  first_name              String                   @db.VarChar(100)
+  last_name               String                   @db.VarChar(100)
+  email                   String                   @unique(map: "email") @db.VarChar(150)
+  phone                   String?                  @db.VarChar(20)
+  password_hash           String                   @db.VarChar(255)
+  role                    users_role               @default(customer)
+  status                  users_status             @default(active)
+  created_at              DateTime?                @default(now()) @db.DateTime(0)
+  updated_at              DateTime?                @default(now()) @db.DateTime(0)
+  admin_logs              admin_logs[]
+  carts                   carts[]
+  notifications           notifications[]
+  order_status_history    order_status_history[]
+  orders                  orders[]
+  room_designs            room_designs[]
+  user_addresses          user_addresses[]
+  modelGenerationProjects ModelGenerationProject[]
 }
 
 enum design_openings_type {
@@ -447,17 +448,17 @@ enum users_status {
 }
 
 model custom_design_items {
-  custom_item_id String         @id @db.Char(36)
-  design_id      String         @db.Char(36)
-  item_type      String         @db.VarChar(100)
-  item_name      String?        @db.VarChar(150)
-  model_url      String?        @db.VarChar(500)
-  position_x     Decimal?       @db.Decimal(10, 2)
-  position_y     Decimal?       @db.Decimal(10, 2)
-  position_z     Decimal?       @db.Decimal(10, 2)
-  rotation_y     Decimal?       @default(0.00) @db.Decimal(10, 2)
-  created_at     DateTime?      @default(now()) @db.DateTime(0)
-  room_designs   room_designs   @relation(fields: [design_id], references: [design_id], onDelete: Cascade, onUpdate: Restrict, map: "fk_custom_item_design")
+  custom_item_id String       @id @db.Char(36)
+  design_id      String       @db.Char(36)
+  item_type      String       @db.VarChar(100)
+  item_name      String?      @db.VarChar(150)
+  model_url      String?      @db.VarChar(500)
+  position_x     Decimal?     @db.Decimal(10, 2)
+  position_y     Decimal?     @db.Decimal(10, 2)
+  position_z     Decimal?     @db.Decimal(10, 2)
+  rotation_y     Decimal?     @default(0.00) @db.Decimal(10, 2)
+  created_at     DateTime?    @default(now()) @db.DateTime(0)
+  room_designs   room_designs @relation(fields: [design_id], references: [design_id], onDelete: Cascade, onUpdate: Restrict, map: "fk_custom_item_design")
 
   @@index([design_id], map: "fk_custom_item_design")
 }
@@ -468,12 +469,71 @@ enum inquiries_status {
 }
 
 model inquiries {
-  inquiry_id  String           @id @db.Char(36)
-  name        String           @db.VarChar(150)
-  email       String           @db.VarChar(150)
-  subject     String?          @db.VarChar(255)
-  message     String           @db.Text
-  status      inquiries_status @default(pending)
-  created_at  DateTime?        @default(now()) @db.DateTime(0)
-  updated_at  DateTime?        @default(now()) @db.DateTime(0)
+  inquiry_id String           @id @db.Char(36)
+  name       String           @db.VarChar(150)
+  email      String           @db.VarChar(150)
+  subject    String?          @db.VarChar(255)
+  message    String           @db.Text
+  status     inquiries_status @default(pending)
+  created_at DateTime?        @default(now()) @db.DateTime(0)
+  updated_at DateTime?        @default(now()) @db.DateTime(0)
+}
+
+enum ModelGenerationStatus {
+  UPLOADED
+  QUEUED
+  EXTRACTING_FRAMES
+  RECONSTRUCTING
+  GENERATING_MESH
+  TEXTURING
+  EXPORTING_GLB
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ModelInputType {
+  VIDEO
+  IMAGES
+}
+
+model ModelGenerationProject {
+  id                  String                @id @default(cuid())
+  userId              String                @db.Char(36)
+  name                String
+  description         String?               @db.Text
+  inputType           ModelInputType
+  status              ModelGenerationStatus @default(UPLOADED)
+  progress            Int                   @default(0)
+  currentStep         String?
+  inputVideoPath      String?
+  outputGlbPath       String?
+  thumbnailPath       String?
+  errorMessage        String?               @db.Text
+  fileSize            BigInt?
+  processingStartedAt DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  user   users                  @relation(fields: [userId], references: [user_id], onDelete: Cascade)
+  images ModelGenerationImage[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("model_generation_projects")
+}
+
+model ModelGenerationImage {
+  id           String   @id @default(cuid())
+  projectId    String
+  filePath     String
+  originalName String?
+  orderNumber  Int?
+  createdAt    DateTime @default(now())
+
+  project ModelGenerationProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("model_generation_images")
 }

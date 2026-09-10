@@ -1,15 +1,23 @@
 'use client';
 
-import React from 'react';
-import { useRouter } from 'next/navigation';
+import React, { Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
 import { useAuth } from '../../../features/auth/AuthContext';
 
-export default function DesignerPage() {
+function DesignerPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const packageId = searchParams.get('package');
   const { user } = useAuth();
   const [savedDesigns, setSavedDesigns] = React.useState<any[]>([]);
   const [loadingDesigns, setLoadingDesigns] = React.useState(true);
+
+  React.useEffect(() => {
+    if (packageId) {
+      router.replace(`designer/workspace?package=${packageId}`);
+    }
+  }, [packageId, router]);
 
   React.useEffect(() => {
     const fetchDesigns = async () => {
@@ -42,6 +50,15 @@ export default function DesignerPage() {
   const loadSavedDesign = (designId: string) => {
     router.push(`designer/workspace?id=${designId}`);
   };
+
+  if (packageId) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[500px] space-y-4 font-sans">
+        <span className="w-8 h-8 border-2 border-[#1a1a1a]/30 border-t-[#1a1a1a] rounded-full animate-spin" />
+        <p className="text-sm text-gray-500 font-light">Redirecting to 3D Customizer...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="py-8 font-sans max-w-7xl mx-auto px-4 md:px-8 space-y-12 select-none">
@@ -170,5 +187,13 @@ export default function DesignerPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function DesignerPage() {
+  return (
+    <Suspense fallback={<div className="py-12 text-center text-gray-400 font-light">Loading designer configurations...</div>}>
+      <DesignerPageContent />
+    </Suspense>
   );
 }

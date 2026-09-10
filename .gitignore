@@ -108,3 +108,9 @@ logs/
 # ----------------------------
 backend/uploads/
 frontend/public/uploads/
+/uploads/
+
+# ----------------------------
+# Archives & Bundles
+# ----------------------------
+*.zip

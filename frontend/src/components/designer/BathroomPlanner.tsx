@@ -239,7 +239,7 @@ export function BathroomCustomFurniture({ item, selected }: { item: any, selecte
   return null;
 }
 
-export default function BathroomPlanner() {
+export default function BathroomPlanner({ readOnly = false }: { readOnly?: boolean }) {
   const { state } = useDesignerStore();
   const catalog = getActiveCatalog("bathroom");
   const categories = getActiveCategories("bathroom");
@@ -248,7 +248,8 @@ export default function BathroomPlanner() {
     <SharedDesignerEngine 
       catalog={catalog} 
       categories={categories} 
-      CustomFurniture={BathroomCustomFurniture} 
+      CustomFurniture={BathroomCustomFurniture}
+      readOnly={readOnly}
     />
   );
 }

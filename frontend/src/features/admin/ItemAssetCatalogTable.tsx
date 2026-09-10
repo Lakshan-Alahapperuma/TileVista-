@@ -16,9 +16,11 @@ import {
   Layers,
   Sparkles,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Video
 } from 'lucide-react';
 import { formatCurrency } from '../../utils';
+import Item3DGeneratorModal from '../../components/model-generator/Item3DGeneratorModal';
 
 interface UnifiedItem {
   itemId: number;
@@ -63,6 +65,7 @@ export const ItemAssetCatalogTable: React.FC = () => {
   const [imageUploading, setImageUploading] = useState<boolean>(false);
   const [glbUploading, setGlbUploading] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [is3DGeneratorOpen, setIs3DGeneratorOpen] = useState<boolean>(false);
 
   // Form fields
   const [scaleX, setScaleX] = useState<number>(1);
@@ -576,30 +579,53 @@ export const ItemAssetCatalogTable: React.FC = () => {
                   />
                 </div>
 
-                {/* GLB model preview status */}
+                {/* GLB model preview status & generator */}
                 <div className="border border-gray-200 p-3 flex flex-col items-center justify-center text-center bg-[#F9F9F7] relative h-36">
                   {editingItem.glbUrl ? (
-                    <div className="space-y-2">
-                      <Box size={28} className="text-emerald-600 mx-auto animate-pulse" />
+                    <div className="space-y-1.5">
+                      <Box size={24} className="text-emerald-600 mx-auto animate-pulse" />
                       <span className="text-[9px] font-bold text-emerald-800 tracking-widest uppercase block">3D GLB Model Ready</span>
                       <span className="text-[7.5px] font-mono text-gray-400 truncate max-w-[140px] block">{editingItem.glbUrl.split('/').pop()}</span>
-                      <button
-                        onClick={() => glbInputRef.current?.click()}
-                        className="text-[9px] text-gray-500 font-bold uppercase underline hover:text-black block mx-auto"
-                      >
-                        Replace GLB
-                      </button>
+                      <div className="flex gap-2 justify-center pt-1">
+                        <button
+                          type="button"
+                          onClick={() => glbInputRef.current?.click()}
+                          className="text-[8.5px] text-gray-500 font-bold uppercase underline hover:text-black"
+                        >
+                          Replace GLB
+                        </button>
+                        <span className="text-gray-300 text-[8.5px]">•</span>
+                        <button
+                          type="button"
+                          onClick={() => setIs3DGeneratorOpen(true)}
+                          className="text-[8.5px] text-[#1A1A1A] font-bold uppercase underline hover:text-black flex items-center gap-0.5"
+                        >
+                          <Video size={9} />
+                          <span>New Scan</span>
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-1.5">
-                      <Layers size={24} className="text-gray-400 mx-auto" />
+                      <Layers size={22} className="text-gray-400 mx-auto" />
                       <span className="text-[9px] font-bold text-gray-400 tracking-wider uppercase block">No 3D Model</span>
-                      <button
-                        onClick={() => glbInputRef.current?.click()}
-                        className="text-[9px] text-[#D4C5B9] font-bold uppercase underline hover:text-[#1A1A1A] block mx-auto"
-                      >
-                        Upload Model
-                      </button>
+                      <div className="flex flex-col gap-1.5 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setIs3DGeneratorOpen(true)}
+                          className="px-2.5 py-1 bg-[#1A1A1A] hover:bg-black text-white text-[9px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1"
+                        >
+                          <Video size={10} />
+                          <span>Scan Video to 3D</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => glbInputRef.current?.click()}
+                          className="text-[8.5px] text-gray-400 font-bold uppercase underline hover:text-[#1A1A1A]"
+                        >
+                          Or Upload .GLB File
+                        </button>
+                      </div>
                     </div>
                   )}
                   {glbUploading && (
@@ -817,6 +843,20 @@ export const ItemAssetCatalogTable: React.FC = () => {
           </div>
 
         </div>
+      )}
+
+      {/* 3D Video Scan Generator Modal */}
+      {editingItem && (
+        <Item3DGeneratorModal
+          isOpen={is3DGeneratorOpen}
+          onClose={() => setIs3DGeneratorOpen(false)}
+          item={editingItem}
+          onSuccess={() => {
+            fetchItems();
+            setSaveSuccess('3D Model scan generated & attached successfully!');
+            setTimeout(() => setSaveSuccess(null), 4000);
+          }}
+        />
       )}
 
     </div>

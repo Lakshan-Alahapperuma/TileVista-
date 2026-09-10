@@ -88,10 +88,11 @@ export default function AdminLayout({
   const sidebarLinks = [
     { name: 'Dashboard', href: '/admin/dashboard', icon: <LayoutDashboard size={16} /> },
     { name: 'Orders', href: '/admin/orders', icon: <Receipt size={16} /> },
-    { name: 'Inventory', href: '/admin/inventory', icon: <Warehouse size={16} /> },
+    { name: 'Products & Assets', href: '/admin/items', icon: <Grid3X3 size={16} /> },
+    { name: 'Inventory & Alerts', href: '/admin/inventory', icon: <Warehouse size={16} />, alert: showNewItemPulse },
     { name: 'Analytics', href: '/admin/analytics', icon: <LineChart size={16} /> },
-    { name: 'Item Assets', href: '/admin/items', icon: <Box size={16} />, badge: pendingCount },
     { name: 'Packages', href: '/admin/packages', icon: <Grid3X3 size={16} /> },
+    { name: '3D Generator', href: '/model-generator', icon: <Box size={16} /> },
     { name: 'Inquiries', href: '/admin/inquiries', icon: <MessageSquare size={16} />, badge: pendingInquiriesCount },
     { name: 'Settings', href: '/admin/settings', icon: <SettingsIcon size={16} /> },
   ];

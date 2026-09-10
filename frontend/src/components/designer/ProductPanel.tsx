@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
 import React from 'react';
-import { X, RotateCw, Trash2, ArrowLeft } from 'lucide-react';
+import { X, RotateCw, Trash2, ArrowLeft, Maximize2 } from 'lucide-react';
 import { useDesignerStore } from '../../store/designer.store';
 import { DOOR_STYLES, WINDOW_STYLES, renderDoorIcon, ItemSidebarPreview } from './SharedDesignerEngine';
 import { getActiveCategories, getActiveCatalog } from './catalog';
 import { remoteLog } from './SharedDesignerEngine';
 
-export default function ProductPanel() {
+export default function ProductPanel({ readOnly = false }: { readOnly?: boolean }) {
+  if (readOnly) return null;
+
   const {
     state, setState, activeCategory, setActiveCategory,
     activePlacement, setActivePlacement, isPlacingItem, setIsPlacingItem, selectedItemId, setSelectedItemId, recordHistory, placedItems,
-    selectedItemColor, setSelectedItemColor, selectedWallIdx, setSelectedWallIdx, wizardStep, showAlert
+    selectedItemColor, setSelectedItemColor, selectedWallIdx, setSelectedWallIdx, wizardStep, showAlert,
+    selectedRoomType, setDoorSizeModal
   } = useDesignerStore();
 
   const [dynamicItems, setDynamicItems] = useState<any[]>([]);
@@ -73,6 +76,19 @@ export default function ProductPanel() {
             setDynamicItems([]);
             setIsLoadingItems(false);
           });
+      } else if (activeCategory === 'packages') {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+        fetch(`${apiUrl}/packages`)
+          .then(res => res.json())
+          .then(data => {
+            setDynamicItems(data || []);
+            setIsLoadingItems(false);
+          })
+          .catch(err => {
+            console.error(err);
+            setDynamicItems([]);
+            setIsLoadingItems(false);
+          });
       } else {
         fetch(`/api/furniture?category=${activeCategory}`)
           .then(res => res.json())
@@ -123,7 +139,17 @@ export default function ProductPanel() {
     } : i));
   };
 
-  const selectedItem = placedItems.find(i => i.id === selectedItemId) || state.wallOpenings.find(op => op.id === selectedItemId);
+  const selectedPlaced = placedItems.find(i => i.id === selectedItemId);
+  const selectedOpening = state.wallOpenings.find(op => op.id === selectedItemId);
+  const selectedItem = selectedPlaced
+    ? { ...selectedPlaced, isOpening: false }
+    : (selectedOpening ? { ...selectedOpening, isOpening: true } : null);
+
+  const isDoor = selectedItem ? (
+    (selectedItem as any).type === 'door' ||
+    (selectedItem as any).style?.includes('door') ||
+    (selectedItem as any).name?.toLowerCase().includes('door')
+  ) : false;
 
   const checkIsWallMounted = (item: any) => {
     if (!item) return false;
@@ -214,7 +240,7 @@ export default function ProductPanel() {
           {/* Category icons */}
           <div className="bg-black rounded-xl p-1.5 shadow-2xl flex flex-col gap-1.5 border border-white/10">
             {getActiveCategories(state.designType, state.subRoomType)
-              .filter(cat => ['openings', 'wall_colours', 'ospos_tiles', 'wall_tiles', 'floor_tiles', 'bathware_products'].includes(cat.id))
+              .filter(cat => ['openings', 'wall_colours', 'ospos_tiles', 'wall_tiles', 'floor_tiles', 'bathware_products', 'packages'].includes(cat.id))
               .map(cat => (
                 <button
                   key={cat.id}
@@ -235,21 +261,180 @@ export default function ProductPanel() {
 
       {/* ── ITEMS DRAWER (FLOATING DRAWER FOR TILES & OPENINGS) ── */}
       {activeCategory && activeCategory !== 'bathware_products' && (
-        <div className={`absolute right-20 top-1/2 -translate-y-1/2 ${['ospos_tiles', 'wall_tiles', 'floor_tiles'].includes(activeCategory) ? 'w-[360px]' : 'w-64'} bg-white/95 backdrop-blur-md border border-gray-100 shadow-2xl rounded-2xl p-5 z-30 font-sans flex flex-col gap-4`}>
+        <div className={`absolute right-20 top-1/2 -translate-y-1/2 ${['ospos_tiles', 'wall_tiles', 'floor_tiles', 'packages'].includes(activeCategory) ? 'w-[360px]' : 'w-64'} bg-white/95 backdrop-blur-md border border-gray-100 shadow-2xl rounded-2xl p-5 z-30 font-sans flex flex-col gap-4`}>
           <div className="flex justify-between items-center border-b border-gray-100 pb-2.5">
             <h3 className="text-xs font-bold tracking-wider text-[#1A1A1A] uppercase">
               {activeCategory === 'wall_tiles' ? 'Wall Tiles' :
                 activeCategory === 'floor_tiles' ? 'Floor Tiles' :
                   activeCategory === 'ospos_tiles' ? 'Load Tiles' :
-                    `Add ${activeCategory.replace('_', ' ')}`}
+                    activeCategory === 'packages' ? 'Curated Suites' :
+                      `Add ${activeCategory.replace('_', ' ')}`}
             </h3>
             <button onClick={() => setActiveCategory(null)} className="p-1 text-gray-400 hover:text-gray-600">
               <X size={14} />
             </button>
           </div>
 
-          <div className={`space-y-3 ${activeCategory === 'ospos_tiles' ? 'max-h-[75vh]' : 'max-h-[300px]'} overflow-y-auto pr-2`}>
-            {activeCategory === 'wall_colours' ? (
+          <div className={`space-y-3 ${['ospos_tiles', 'packages'].includes(activeCategory) ? 'max-h-[75vh]' : 'max-h-[300px]'} overflow-y-auto pr-2`}>
+            {activeCategory === 'packages' ? (
+              <div className="space-y-3 pt-1 pb-4">
+                {isLoadingItems ? (
+                  <div className="text-center py-6 text-xs text-gray-400">Loading suites...</div>
+                ) : dynamicItems.length === 0 ? (
+                  <div className="text-center py-6 text-xs text-gray-400">No pre-designed suites found.</div>
+                ) : (
+                  dynamicItems.map((pkg: any) => (
+                    <div 
+                      key={pkg.id} 
+                      className="bg-white border border-gray-150 rounded-xl p-3.5 hover:border-black transition-all flex flex-col gap-2 relative shadow-sm"
+                    >
+                      <div className="flex justify-between items-start">
+                        <span className="font-bold text-xs text-gray-800 line-clamp-1">{pkg.name}</span>
+                        <span className="bg-emerald-50 border border-emerald-100 text-emerald-800 text-[8px] font-bold px-1.5 py-0.5 rounded-full">
+                          Save {pkg.discountPercent}%
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 font-light leading-relaxed line-clamp-2">
+                        {pkg.description}
+                      </p>
+                      <div className="flex items-baseline justify-between border-t border-gray-50 pt-2 mt-1">
+                        <span className="text-[10px] text-gray-400 uppercase">Bundle Price</span>
+                        <span className="font-bold text-xs text-gray-800">
+                          Rs {Math.round(pkg.calculatedPrice).toLocaleString()}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+                            const STATIC_BASE = apiUrl.replace('/api', '');
+
+                            const itemsRes = await fetch(`${apiUrl}/items?includeHidden=true`);
+                            if (!itemsRes.ok) throw new Error('Failed to fetch items catalog');
+                            const allItems = await itemsRes.json();
+                            const itemsMap = new Map(allItems.map((item: any) => [item.itemId, item]));
+
+                            const wFt = 12.0;
+                            const dFt = 9.0;
+                            const hFt = 8.5;
+
+                            let floorTexUrl: string | undefined = undefined;
+                            let wallTexUrl: string | undefined = undefined;
+                            const mappedItems: any[] = [];
+                            let sinkCount = 0;
+                            let toiletCount = 0;
+                            let bathCount = 0;
+                            let showerCount = 0;
+
+                            pkg.items.forEach((pi: any) => {
+                              const matchedItem = itemsMap.get(pi.osposItemId) as any;
+                              if (!matchedItem) return;
+
+                              const category = (matchedItem.category || '').toLowerCase();
+                              const name = (matchedItem.name || '').toLowerCase();
+                              
+                              const formatUrl = (url?: string | null) => {
+                                if (!url) return undefined;
+                                if (url.startsWith('http://') || url.startsWith('https://')) return url;
+                                return `${STATIC_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
+                              };
+
+                              const isTile = category.includes('tile') || category.includes('mosaic') || name.includes('tile') || name.includes('mosaic');
+
+                              if (isTile) {
+                                const isFloor = [4, 6, 17, 18, 20].includes(matchedItem.itemId) || name.includes('floor') || category.includes('floor');
+                                if (isFloor) {
+                                  floorTexUrl = formatUrl(matchedItem.imageUrl);
+                                } else {
+                                  wallTexUrl = formatUrl(matchedItem.imageUrl);
+                                }
+                              } else {
+                                let type = 'sink';
+                                let position: [number, number, number] = [0, 0, 0];
+                                let rotation = 0;
+                                let isWallMounted = false;
+
+                                if (category.includes('basin') || category.includes('sink') || name.includes('basin') || name.includes('sink') || name.includes('vanity')) {
+                                  type = 'sink';
+                                  position = [-0.6 + (sinkCount * 1.2), 0, -1.0];
+                                  rotation = 0;
+                                  sinkCount++;
+                                } else if (category.includes('closet') || category.includes('toilet') || category.includes('wc') || name.includes('closet') || name.includes('toilet') || name.includes('wc') || name.includes('commode')) {
+                                  type = 'toilet';
+                                  position = [-1.3, 0, -0.2 + (toiletCount * 0.8)];
+                                  rotation = Math.PI / 2;
+                                  toiletCount++;
+                                } else if (category.includes('bath') || name.includes('bath') || name.includes('tub')) {
+                                  type = 'bathtub';
+                                  position = [1.1, 0, 0.2 + (bathCount * 0.9)];
+                                  rotation = -Math.PI / 2;
+                                  bathCount++;
+                                } else if (category.includes('shower') || name.includes('shower')) {
+                                  type = 'shower';
+                                  position = [1.1, 0, -1.0 + (showerCount * 0.9)];
+                                  rotation = -Math.PI / 2;
+                                  showerCount++;
+                                } else if (category.includes('mirror') || name.includes('mirror') || category.includes('light')) {
+                                  type = 'light';
+                                  position = [0, 1.6, -1.3];
+                                  rotation = 0;
+                                  isWallMounted = true;
+                                } else {
+                                  type = 'plant';
+                                  position = [-1.3, 0, 0.8];
+                                  rotation = 0;
+                                }
+
+                                const randId = 'item_' + Math.random().toString(36).substring(2, 9);
+                                mappedItems.push({
+                                  id: randId,
+                                  type,
+                                  name: matchedItem.name,
+                                  model: formatUrl(matchedItem.glbUrl) || null,
+                                  cost: matchedItem.price || 150.00,
+                                  position,
+                                  rotation,
+                                  isWallMounted
+                                });
+                              }
+                            });
+
+                            const mappedWallDesigns = Array(8).fill(null).map(() => ({
+                              splitMode: 'full' as const,
+                              tileColorBottom: '#ffffff',
+                              tileColorTop: '#ffffff',
+                              tileColorCenter: '#ffffff',
+                              tileColorSides: '#ffffff',
+                              textureUrl: wallTexUrl || undefined
+                            }));
+
+                            setState((prev: any) => ({
+                              ...prev,
+                              widthFt: wFt,
+                              depthFt: dFt,
+                              heightFt: hFt,
+                              floorTextureUrl: floorTexUrl || undefined,
+                              wallTextureUrl: wallTexUrl || undefined,
+                              wallDesigns: mappedWallDesigns,
+                            }));
+
+                            useDesignerStore.getState().setPlacedItems(mappedItems);
+                            showAlert(`Curated package "${pkg.name}" applied successfully!`);
+                            setActiveCategory(null);
+                          } catch (err: any) {
+                            alert(`Failed to load package: ${err.message}`);
+                          }
+                        }}
+                        className="w-full bg-[#1A1A1A] hover:bg-black text-white text-[9px] font-bold tracking-wider uppercase py-2 transition-all rounded mt-1.5"
+                      >
+                        Apply Package Setup
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : activeCategory === 'wall_colours' ? (
               <div className="space-y-4">
                 <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase block">Solid Colors</span>
                 <div className="grid grid-cols-5 gap-2">
@@ -423,8 +608,6 @@ export default function ProductPanel() {
                   <div className="grid grid-cols-2 gap-2">
 
                     {DOOR_STYLES.map((door) => (
-
-
                       <button
                         key={door.id}
                         onClick={() => {
@@ -808,7 +991,7 @@ export default function ProductPanel() {
           <span className="text-xs font-semibold tracking-wide border-r border-white/15 pr-4">
             Selected: <strong className="text-gray-200">{selectedItem.name}</strong>
           </span>
-          {!(selectedItem as any).isOpening && (
+          {!isDoor && !(selectedItem as any).isOpening && (
             <button
               id="btn-rotate"
               onClick={handleRotateItem}
@@ -817,6 +1000,30 @@ export default function ProductPanel() {
             >
               <RotateCw size={14} />
               Rotate
+            </button>
+          )}
+
+          {((selectedItem as any).isOpening || isDoor) && (selectedRoomType === 'bathroom' || state.designType === 'bathroom') && (
+            <button
+              id="btn-resize-opening"
+              onClick={() => {
+                const isWin = (selectedItem as any).type === 'window' || (selectedItem as any).style?.includes('window');
+                setDoorSizeModal({
+                  isOpen: true,
+                  target: 'existing',
+                  openingType: isWin ? 'window' : 'door',
+                  openingId: selectedItem.id,
+                  doorStyle: (selectedItem as any).style || (isWin ? 'bathroom_window' : 'single_door'),
+                  doorName: (selectedItem as any).name || (isWin ? 'Window' : 'Door'),
+                  currentWidth: (selectedItem as any).width || (isWin ? 0.6 : 0.9),
+                  currentHeight: (selectedItem as any).height || (isWin ? 0.6 : 2.0),
+                });
+              }}
+              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full flex items-center justify-center gap-1.5 text-xs font-bold uppercase transition-all shadow-md active:scale-95"
+              title="Resize Opening"
+            >
+              <Maximize2 size={14} />
+              Resize
             </button>
           )}
           <button
