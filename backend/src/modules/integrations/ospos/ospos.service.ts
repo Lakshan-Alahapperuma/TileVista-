@@ -22,6 +22,33 @@ export interface OsposItem {
   attributes?: Record<string, string>;
 }
 
+export interface CreateOsposQuoteDto {
+  reference: string;
+  location_id: number;
+  customer: {
+    user_id: string;
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string;
+  };
+  items: {
+    ospos_item_id: number;
+    quantity: number;
+    unit_price: number;
+  }[];
+  expires_at: string;
+  comment?: string;
+}
+
+export interface OsposQuoteResponseDto {
+  success: boolean;
+  message: string;
+  reference: string;
+  ospos_sale_id?: number;
+  status?: string;
+}
+
 /**
  * Service to handle communications with the external OSPOS (Open Source Point Of Sale) API.
  * Safely fetches live stock inventory data and provides it to the core orders and analytics modules.
@@ -150,6 +177,65 @@ export class OsposIntegrationService {
         undefined,
         true, // isStaleData: true
       );
+    }
+  }
+
+  /**
+   * Dispatches a quotation payload to OSPOS to create a suspended sale.
+   * Catches errors gracefully so local TileVista orders remain safe if OSPOS is unreachable.
+   */
+  async createQuote(dto: CreateOsposQuoteDto): Promise<OsposQuoteResponseDto> {
+    try {
+      this.logger.log(`Dispatching OSPOS quote creation for reference: ${dto.reference}...`);
+      const response = await firstValueFrom(
+        this.httpService.post<OsposQuoteResponseDto>(
+          `${this.baseUrl}/quote`,
+          dto,
+          {
+            headers: {
+              Authorization: this.secretToken,
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+          },
+        ),
+      );
+      this.logger.log(`OSPOS quote created successfully for reference ${dto.reference}. Sale ID: ${response.data?.ospos_sale_id}`);
+      return response.data;
+    } catch (error) {
+      this.logger.warn(`Failed to create quote in OSPOS for reference ${dto.reference}: ${error.message}`);
+      return {
+        success: false,
+        message: error.message || 'OSPOS quote creation failed',
+        reference: dto.reference,
+      };
+    }
+  }
+
+  /**
+   * Dispatches a cancellation request for a TileVista-linked suspended quote in OSPOS.
+   */
+  async cancelQuote(reference: string): Promise<any> {
+    try {
+      this.logger.log(`Dispatching OSPOS quote cancellation for reference: ${reference}...`);
+      const response = await firstValueFrom(
+        this.httpService.post(
+          `${this.baseUrl}/quote/cancel`,
+          { reference },
+          {
+            headers: {
+              Authorization: this.secretToken,
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+          },
+        ),
+      );
+      this.logger.log(`OSPOS quote cancelled successfully for reference ${reference}.`);
+      return response.data;
+    } catch (error) {
+      this.logger.warn(`Failed to cancel quote in OSPOS for reference ${reference}: ${error.message}`);
+      return { success: false, message: error.message };
     }
   }
 }

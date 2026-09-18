@@ -92,7 +92,15 @@ async function main() {
     },
   });
 
-  console.log('✅ Created product and asset mapped to OSPOS item 2.');
+  await prisma.stock_thresholds.create({
+    data: {
+      threshold_id: 't0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02',
+      product_id: prod2.product_id,
+      threshold_value: 5,
+    },
+  });
+
+  console.log('✅ Created product, threshold (5), and asset mapped to OSPOS item 2.');
 
   // Create default sizes and transformations for assets to prevent frontend crashes
   for (const assetId of [asset2.asset_id]) {

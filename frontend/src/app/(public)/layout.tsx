@@ -3,10 +3,12 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ShoppingCart, RefreshCw, Phone, Mail, MapPin, User } from 'lucide-react';
+import { ShoppingCart, RefreshCw, Phone, Mail, MapPin, User, Bell, Check, ChevronDown, Calendar, Package } from 'lucide-react';
 import { useAuth } from '../../features/auth/AuthContext';
 import { MegaMenuDropdown } from '../../components/shared/MegaMenuDropdown';
 import { useCart } from '../../features/cart/hooks/useCart';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 export default function PublicLayout({
   children,
@@ -19,9 +21,80 @@ export default function PublicLayout({
   const { items } = useCart();
   const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
 
+  const [notifications, setNotifications] = React.useState<any[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = React.useState<number>(0);
+  const [showNotificationDropdown, setShowNotificationDropdown] = React.useState(false);
+  const [showAccountDropdown, setShowAccountDropdown] = React.useState(false);
 
+  const fetchNotifications = React.useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const token = localStorage.getItem('tilevista_admin_token');
+      if (!token) return;
 
+      const [listRes, countRes] = await Promise.all([
+        fetch(`${API_BASE}/notifications`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE}/notifications/unread-count`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
 
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        setNotifications(Array.isArray(listData) ? listData.slice(0, 5) : []);
+      }
+      if (countRes.ok) {
+        const countData = await countRes.json();
+        setUnreadNotificationCount(countData.unreadCount || 0);
+      }
+    } catch {
+      // Silently fail navigation notifications poll
+    }
+  }, [isAuthenticated]);
+
+  React.useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 15000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
+  React.useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.notification-dropdown-container') && !target.closest('.account-dropdown-container')) {
+        setShowNotificationDropdown(false);
+        setShowAccountDropdown(false);
+      }
+    };
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, []);
+
+  const handleMarkAllRead = async () => {
+    try {
+      const token = localStorage.getItem('tilevista_admin_token');
+      if (!token) return;
+      await fetch(`${API_BASE}/notifications/read-all`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      fetchNotifications();
+    } catch {
+      // Silently handle error
+    }
+  };
+
+  const handleMarkOneRead = async (notificationId: string) => {
+    try {
+      const token = localStorage.getItem('tilevista_admin_token');
+      if (!token) return;
+      await fetch(`${API_BASE}/notifications/${notificationId}/read`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      fetchNotifications();
+    } catch {
+      // Silently handle error
+    }
+  };
 
   const navigation = [
     { name: 'Home', href: '/' },
@@ -121,18 +194,173 @@ export default function PublicLayout({
               )}
             </Link>
 
-            {/* User profile Link */}
+            {/* Notification Bell & User Account Menu */}
             {isAuthenticated && user ? (
-              <div className="flex items-center gap-2.5">
-                <span className="text-[11px] text-gray-500 font-light hidden sm:inline">
-                  Hello, <span className="font-semibold text-[#1A1A1A]">{user.firstName || user.email.split('@')[0]}</span>
-                </span>
-                <button
-                  onClick={() => setShowLogoutConfirm(true)}
-                  className="text-[9px] font-bold tracking-wider text-gray-400 hover:text-red-600 uppercase border border-gray-200 px-2.5 py-1.5 hover:border-red-200 transition-colors bg-[#F9F9F7]"
+              <div className="flex items-center gap-3">
+                {/* 1. Notification Bell Icon with Badge (Hover + Click trigger) */}
+                <div
+                  className="relative py-2 -my-2 notification-dropdown-container"
+                  onMouseEnter={() => {
+                    setShowNotificationDropdown(true);
+                    setShowAccountDropdown(false);
+                  }}
+                  onMouseLeave={() => setShowNotificationDropdown(false)}
                 >
-                  Sign Out
-                </button>
+                  <button
+                    onClick={() => {
+                      setShowNotificationDropdown(!showNotificationDropdown);
+                      setShowAccountDropdown(false);
+                    }}
+                    className="p-1.5 text-gray-700 hover:text-[#1A1A1A] transition-colors relative block"
+                    aria-label="Notifications"
+                  >
+                    <Bell size={19} strokeWidth={1.8} />
+                    {unreadNotificationCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none animate-pulse">
+                        {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Notifications Popover Dropdown */}
+                  {showNotificationDropdown && (
+                    <div
+                      className="absolute right-0 top-full pt-1 w-80 z-50"
+                      onMouseEnter={() => setShowNotificationDropdown(true)}
+                      onMouseLeave={() => setShowNotificationDropdown(false)}
+                    >
+                      <div className="bg-white border border-gray-200 shadow-xl text-xs font-sans animate-in fade-in zoom-in-95 duration-150">
+                        <div className="p-3.5 bg-[#F9F9F7] border-b border-gray-200 flex justify-between items-center">
+                          <span className="font-bold text-[#1A1A1A] uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+                            <Bell size={12} className="text-[#8C7A6B]" />
+                            <span>Notifications</span>
+                          </span>
+                          {unreadNotificationCount > 0 && (
+                            <button
+                              onClick={handleMarkAllRead}
+                              className="text-[9px] text-[#8C7A6B] hover:text-black font-semibold uppercase tracking-wider"
+                            >
+                              Mark All Read
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="max-h-72 overflow-y-auto divide-y divide-gray-100">
+                          {notifications.length === 0 ? (
+                            <div className="p-6 text-center text-gray-400 text-[11px] font-light">
+                              No notifications yet.
+                            </div>
+                          ) : (
+                            notifications.map((n) => (
+                              <div
+                                key={n.notification_id}
+                                onClick={() => handleMarkOneRead(n.notification_id)}
+                                className={`p-3.5 hover:bg-[#F9F9F7] transition-colors cursor-pointer ${
+                                  !n.is_read ? 'bg-amber-50/40 border-l-2 border-l-amber-500' : ''
+                                }`}
+                              >
+                                <div className="flex justify-between items-start gap-2">
+                                  <span className={`font-semibold text-[11px] ${!n.is_read ? 'text-amber-950 font-bold' : 'text-[#1A1A1A]'}`}>
+                                    {n.title}
+                                  </span>
+                                  <span className="text-[8.5px] text-gray-400 font-mono">
+                                    {new Date(n.created_at).toLocaleDateString()}
+                                  </span>
+                                </div>
+                                <p className="text-[10.5px] text-gray-600 font-light mt-1 leading-snug">
+                                  {n.message}
+                                </p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        <div className="p-2.5 bg-gray-50 border-t border-gray-100 text-center">
+                          <Link
+                            href="/notifications"
+                            onClick={() => setShowNotificationDropdown(false)}
+                            className="text-[10px] font-bold text-[#8C7A6B] hover:text-black uppercase tracking-wider block py-1"
+                          >
+                            View All Notifications →
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Customer MY ACCOUNT Dropdown Menu (Hover + Click trigger) */}
+                <div
+                  className="relative py-2 -my-2 account-dropdown-container"
+                  onMouseEnter={() => {
+                    setShowAccountDropdown(true);
+                    setShowNotificationDropdown(false);
+                  }}
+                  onMouseLeave={() => setShowAccountDropdown(false)}
+                >
+                  <button
+                    onClick={() => {
+                      setShowAccountDropdown(!showAccountDropdown);
+                      setShowNotificationDropdown(false);
+                    }}
+                    className="flex items-center gap-1.5 text-[9.5px] font-bold tracking-wider text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white uppercase border border-[#1A1A1A] px-3 py-1.5 transition-all bg-white"
+                  >
+                    <span>MY ACCOUNT</span>
+                    <ChevronDown size={12} />
+                  </button>
+
+                  {showAccountDropdown && (
+                    <div
+                      className="absolute right-0 top-full pt-1 w-48 z-50"
+                      onMouseEnter={() => setShowAccountDropdown(true)}
+                      onMouseLeave={() => setShowAccountDropdown(false)}
+                    >
+                      <div className="bg-white border border-gray-200 shadow-xl py-1 font-sans text-xs animate-in fade-in zoom-in-95 duration-150">
+                        <div className="px-4 py-2 border-b border-gray-100 bg-[#F9F9F7]">
+                          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block">Logged In As</span>
+                          <span className="font-semibold text-[#1A1A1A] block truncate">{user.firstName || user.email}</span>
+                        </div>
+
+                        <Link
+                          href="/dashboard"
+                          onClick={() => setShowAccountDropdown(false)}
+                          className="flex items-center gap-2 px-4 py-2.5 text-gray-700 hover:bg-[#F9F9F7] hover:text-black font-medium transition-colors"
+                        >
+                          <Package size={13} className="text-[#8C7A6B]" />
+                          <span>My Orders</span>
+                        </Link>
+
+                        <Link
+                          href="/notifications"
+                          onClick={() => setShowAccountDropdown(false)}
+                          className="flex items-center gap-2 px-4 py-2.5 text-gray-700 hover:bg-[#F9F9F7] hover:text-black font-medium transition-colors"
+                        >
+                          <Bell size={13} className="text-[#8C7A6B]" />
+                          <span>Notifications ({unreadNotificationCount})</span>
+                        </Link>
+
+                        <Link
+                          href="/account"
+                          onClick={() => setShowAccountDropdown(false)}
+                          className="flex items-center gap-2 px-4 py-2.5 text-gray-700 hover:bg-[#F9F9F7] hover:text-black font-medium transition-colors border-t border-gray-100"
+                        >
+                          <User size={13} className="text-[#8C7A6B]" />
+                          <span>Account Details</span>
+                        </Link>
+
+                        <button
+                          onClick={() => {
+                            setShowAccountDropdown(false);
+                            setShowLogoutConfirm(true);
+                          }}
+                          className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-red-600 hover:bg-red-50 font-bold transition-colors border-t border-gray-100 uppercase text-[9.5px] tracking-wider"
+                        >
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <Link

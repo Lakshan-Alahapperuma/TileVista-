@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OsposIntegrationService, OsposItem } from '../integrations/ospos/ospos.service';
 import { UnifiedItemDto, UpsertAssetDto, PublishProductDto } from './dto/unified-item.dto';
@@ -20,6 +20,7 @@ export class ProductsService {
     osposItem: OsposItem,
     dbProduct: any | null,
     isStaleData = false,
+    reservedQuantity = 0,
   ): UnifiedItemDto {
     const dto = new UnifiedItemDto();
     dto.itemId = osposItem.item_id;
@@ -31,6 +32,8 @@ export class ProductsService {
     dto.description = osposItem.description ?? null;
     dto.price = osposItem.price;
     dto.quantity = osposItem.quantity;
+    dto.reservedQuantity = reservedQuantity;
+    dto.effectiveAvailable = Math.max(0, osposItem.quantity - reservedQuantity);
     dto.isStaleData = isStaleData;
     dto.brand = osposItem.brand ?? null;
     dto.color = osposItem.color ?? null;
@@ -73,6 +76,7 @@ export class ProductsService {
       }
 
       dto.isEnabled = dbProduct.is_active ?? true;
+      dto.threshold = dbProduct.stock_thresholds?.threshold_value ?? null;
       dto.notes = null;
       dto.hasAssetEntry = true;
     } else {
@@ -83,6 +87,7 @@ export class ProductsService {
       dto.tags = [];
       dto.material = osposItem.attributes?.['Material'] || osposItem.attributes?.['material'] || osposItem.material || null;
       dto.finish = osposItem.attributes?.['Color'] || osposItem.attributes?.['color'] || osposItem.color || null;
+      dto.threshold = null;
       dto.isEnabled = false;
       dto.notes = null;
       dto.hasAssetEntry = false;
@@ -111,10 +116,11 @@ export class ProductsService {
    * If includeHidden is false, it only returns items that have an asset entry and are enabled/visible.
    */
   async findAll(includeHidden: boolean = false, filters: any = {}): Promise<UnifiedItemDto[]> {
-    const [osposItems, dbProducts] = await Promise.all([
+    const [osposItems, dbProducts, activeReservations] = await Promise.all([
       this.osposService.fetchAllItems(),
       this.prisma.products.findMany({
         include: {
+          stock_thresholds: true,
           product_assets: {
             include: {
               asset_sizes: true,
@@ -128,7 +134,25 @@ export class ProductsService {
           },
         },
       }),
+      this.prisma.inventory_reservations.findMany({
+        where: {
+          status: 'active',
+          expires_at: { gte: new Date() },
+        },
+        select: {
+          ospos_item_id: true,
+          quantity: true,
+        },
+      }),
     ]);
+
+    const reservedMap = new Map<number, number>();
+    for (const res of activeReservations) {
+      reservedMap.set(
+        res.ospos_item_id,
+        (reservedMap.get(res.ospos_item_id) || 0) + res.quantity,
+      );
+    }
 
     const productMap = new Map(dbProducts.map((p) => [p.ospos_item_id, p]));
 
@@ -148,12 +172,14 @@ export class ProductsService {
           price: 0,
           quantity: 0,
         };
-        return this.buildUnifiedItem(fallbackOsposItem, dbProduct, true);
+        const reservedQty = reservedMap.get(dbProduct.ospos_item_id) || 0;
+        return this.buildUnifiedItem(fallbackOsposItem, dbProduct, true, reservedQty);
       });
     } else {
-      result = osposItems.map((item) =>
-        this.buildUnifiedItem(item, productMap.get(item.item_id) ?? null, false),
-      );
+      result = osposItems.map((item) => {
+        const reservedQty = reservedMap.get(item.item_id) || 0;
+        return this.buildUnifiedItem(item, productMap.get(item.item_id) ?? null, false, reservedQty);
+      });
     }
 
     // ── Step 2: Collect stale local DB items that are missing from OSPOS ──────
@@ -282,11 +308,12 @@ export class ProductsService {
    * If includeHidden is false, throws a 404 if the item lacks an asset entry or is not visible.
    */
   async findOne(osposItemId: number, includeHidden: boolean = false): Promise<UnifiedItemDto> {
-    const [osposItems, dbProduct] = await Promise.all([
+    const [osposItems, dbProduct, activeReservations] = await Promise.all([
       this.osposService.fetchAllItems(),
       this.prisma.products.findUnique({
         where: { ospos_item_id: osposItemId },
         include: {
+          stock_thresholds: true,
           product_assets: {
             include: {
               asset_sizes: true,
@@ -300,7 +327,19 @@ export class ProductsService {
           },
         },
       }),
+      this.prisma.inventory_reservations.findMany({
+        where: {
+          ospos_item_id: osposItemId,
+          status: 'active',
+          expires_at: { gte: new Date() },
+        },
+        select: {
+          quantity: true,
+        },
+      }),
     ]);
+
+    const reservedQuantity = activeReservations.reduce((sum, r) => sum + r.quantity, 0);
 
     const osposItem = osposItems.find((i) => i.item_id === osposItemId);
     if (!osposItem) {
@@ -318,7 +357,7 @@ export class ProductsService {
           price: 0,
           quantity: 0,
         };
-        const fallbackUnified = this.buildUnifiedItem(fallbackOsposItem, dbProduct, true);
+        const fallbackUnified = this.buildUnifiedItem(fallbackOsposItem, dbProduct, true, reservedQuantity);
         if (!includeHidden && (!fallbackUnified.hasAssetEntry || !fallbackUnified.isEnabled)) {
           throw new NotFoundException(`Product with ID ${osposItemId} not found.`);
         }
@@ -329,7 +368,7 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${osposItemId} not found.`);
     }
 
-    const unified = this.buildUnifiedItem(osposItem, dbProduct, false);
+    const unified = this.buildUnifiedItem(osposItem, dbProduct, false, reservedQuantity);
     if (!includeHidden && (!unified.hasAssetEntry || !unified.isEnabled)) {
       throw new NotFoundException(`Product with ID ${osposItemId} not found.`);
     }
@@ -534,6 +573,25 @@ export class ProductsService {
       }
     }
 
+    // Process stock_thresholds if threshold is specified
+    if (dto.threshold !== undefined && dto.threshold !== null) {
+      if (typeof dto.threshold !== 'number' || dto.threshold < 0 || !Number.isInteger(dto.threshold)) {
+        throw new BadRequestException('Stock threshold must be a valid non-negative integer');
+      }
+
+      await this.prisma.stock_thresholds.upsert({
+        where: { product_id: product.product_id },
+        create: {
+          threshold_id: crypto.randomUUID(),
+          product_id: product.product_id,
+          threshold_value: dto.threshold,
+        },
+        update: {
+          threshold_value: dto.threshold,
+        },
+      });
+    }
+
     return this.findOne(osposItemId, true);
   }
 
@@ -602,6 +660,20 @@ export class ProductsService {
           rotation_z: 0,
         }
       });
+
+      if (data.threshold !== undefined && data.threshold !== null) {
+        if (typeof data.threshold !== 'number' || data.threshold < 0 || !Number.isInteger(data.threshold)) {
+          throw new BadRequestException('Stock threshold must be a valid non-negative integer');
+        }
+
+        await tx.stock_thresholds.create({
+          data: {
+            threshold_id: crypto.randomUUID(),
+            product_id: productId,
+            threshold_value: data.threshold,
+          },
+        });
+      }
 
       return { product, productAsset };
     });

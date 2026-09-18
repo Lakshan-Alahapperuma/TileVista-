@@ -34,4 +34,52 @@ export class UsersService {
     const dbUsers = await this.prisma.users.findMany();
     return dbUsers.map((user) => this.mapUserResponse(user));
   }
+
+  async updateProfile(userId: string, data: { firstName?: string; lastName?: string; phone?: string }) {
+    const user = await this.prisma.users.findUnique({ where: { user_id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const updated = await this.prisma.users.update({
+      where: { user_id: userId },
+      data: {
+        ...(data.firstName !== undefined && { first_name: data.firstName }),
+        ...(data.lastName !== undefined && { last_name: data.lastName }),
+        ...(data.phone !== undefined && { phone: data.phone }),
+      },
+    });
+
+    return this.mapUserResponse(updated);
+  }
+
+  async changePassword(userId: string, currentPass: string, newPass: string) {
+    const bcrypt = await import('bcrypt');
+    const user = await this.prisma.users.findUnique({ where: { user_id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    let isMatch = false;
+    try {
+      isMatch = await bcrypt.compare(currentPass, user.password_hash);
+    } catch {
+      isMatch = false;
+    }
+    if (!isMatch && currentPass === user.password_hash) {
+      isMatch = true;
+    }
+
+    if (!isMatch) {
+      throw new (await import('@nestjs/common')).BadRequestException('Current password is incorrect');
+    }
+
+    const newHash = await bcrypt.hash(newPass, 10);
+    await this.prisma.users.update({
+      where: { user_id: userId },
+      data: { password_hash: newHash },
+    });
+
+    return { success: true, message: 'Password updated successfully' };
+  }
 }

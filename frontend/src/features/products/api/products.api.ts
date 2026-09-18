@@ -38,7 +38,7 @@ export const fetchAvailableFilters = async (categoryId?: number): Promise<{ bran
 };
 
 export const fetchProductDetails = async (id: number): Promise<UnifiedItem> => {
-  const response = await fetch(`${API_BASE}/items/${id}`);
+  const response = await fetch(`${API_BASE}/items/${id}`, { cache: 'no-store' });
   if (!response.ok) {
     throw new Error(`Failed to load product details (${response.status})`);
   }
