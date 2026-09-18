@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -14,12 +15,14 @@ import { OsposIntegrationModule } from './modules/integrations/ospos/ospos.modul
 import { InquiriesModule } from './modules/inquiries/inquiries.module';
 import { BullModule } from '@nestjs/bullmq';
 import { ModelGeneratorModule } from './modules/model-generator/model-generator.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 const moduleImports: any[] = [
   ConfigModule.forRoot({
     isGlobal: true,
     envFilePath: ['.env', '../.env'],
   }),
+  ScheduleModule.forRoot(),
   PrismaModule,
   AuthModule,
   UsersModule,
@@ -32,6 +35,7 @@ const moduleImports: any[] = [
   AnalyticsModule,
   OsposIntegrationModule,
   InquiriesModule,
+  NotificationsModule,
 ];
 
 if (process.env.REDIS_AVAILABLE === 'true') {

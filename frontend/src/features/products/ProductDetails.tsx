@@ -92,7 +92,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ id, slug }) => {
 
   const productImageUrl = product.imageUrl ? `${STATIC_BASE}${product.imageUrl}` : getFallbackImage(product.category);
 
-  const stockLevel = product.quantity;
+  const stockLevel = product.effectiveAvailable !== undefined ? product.effectiveAvailable : product.quantity;
   const isOutOfStock = stockLevel <= 0;
   const isLowStock = stockLevel > 0 && stockLevel <= 10;
 

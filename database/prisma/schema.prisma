@@ -205,6 +205,7 @@ model order_status_history {
 model orders {
   order_id               String                   @id @db.Char(36)
   order_reference        String                   @unique(map: "order_reference") @db.VarChar(100)
+  ospos_sale_id          Int?
   user_id                String                   @db.Char(36)
   design_id              String?                  @db.Char(36)
   total_amount           Decimal                  @db.Decimal(12, 2)
@@ -410,6 +411,7 @@ enum asset_sizes_unit {
 
 enum inventory_reservations_status {
   active
+  released
   expired
   completed
 }

@@ -8,6 +8,8 @@ export interface UnifiedItem {
   description: string | null;
   price: number;
   quantity: number;
+  reservedQuantity?: number;
+  effectiveAvailable?: number;
   imageUrl: string | null;
   glbUrl: string | null;
   scale: { x: number; y: number; z: number };

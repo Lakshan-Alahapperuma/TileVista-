@@ -51,12 +51,18 @@ export class UnifiedItemDto {
   material: string | null;
   /** Surface finish (e.g. "Matte", "Glossy") */
   finish: string | null;
+  /** TileVista order approval threshold value from stock_thresholds */
+  threshold: number | null;
   /** Whether this item is enabled / visible on the public site */
   isEnabled: boolean;
   /** Admin notes for asset management */
   notes: string | null;
   /** True if a TileVista asset catalog entry exists for this OSPOS item */
   hasAssetEntry: boolean;
+  /** TileVista active non-expired reserved quantity */
+  reservedQuantity?: number;
+  /** Effective available quantity (OSPOS physical stock - active reserved quantity) */
+  effectiveAvailable?: number;
   /** Flag indicating if the stock data is stale (fetched from fallback state) */
   isStaleData?: boolean;
 }
@@ -89,6 +95,8 @@ export class UpsertAssetDto {
   @IsOptional() @IsString()
   @IsIn(['cm', 'm'])
   unit?: 'cm' | 'm';
+  @IsOptional() @IsNumber()
+  threshold?: number;
 }
 
 export class PublishProductDto {
@@ -129,4 +137,8 @@ export class PublishProductDto {
   @IsString()
   @IsIn(['cm', 'm'])
   unit: 'cm' | 'm';
+
+  @IsOptional()
+  @IsNumber()
+  threshold?: number;
 }

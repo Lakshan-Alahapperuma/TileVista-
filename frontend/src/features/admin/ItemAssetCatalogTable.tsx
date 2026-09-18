@@ -44,6 +44,9 @@ interface UnifiedItem {
   isEnabled: boolean;
   notes: string | null;
   hasAssetEntry: boolean;
+  threshold?: number | null;
+  reservedQuantity?: number;
+  effectiveAvailable?: number;
 }
 
 export const ItemAssetCatalogTable: React.FC = () => {
@@ -53,6 +56,7 @@ export const ItemAssetCatalogTable: React.FC = () => {
   const [search, setSearch] = useState<string>('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | 'ALL'>('ALL');
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<number | 'ALL'>('ALL');
+  const [statusTab, setStatusTab] = useState<'ALL' | 'APPROVED' | 'PENDING' | 'DISABLED'>('ALL');
 
   const [appliedSearch, setAppliedSearch] = useState<string>('');
   const [appliedCategoryId, setAppliedCategoryId] = useState<number | 'ALL'>('ALL');
@@ -81,6 +85,7 @@ export const ItemAssetCatalogTable: React.FC = () => {
   const [finish, setFinish] = useState<string>('');
   const [isEnabled, setIsEnabled] = useState<boolean>(true);
   const [notes, setNotes] = useState<string>('');
+  const [thresholdInput, setThresholdInput] = useState<string>('');
 
   const imageInputRef = useRef<HTMLInputElement>(null);
   const glbInputRef = useRef<HTMLInputElement>(null);
@@ -126,6 +131,7 @@ export const ItemAssetCatalogTable: React.FC = () => {
     setScaleY(item.scale?.y ?? 1);
     setScaleZ(item.scale?.z ?? 1);
     setRotationY(item.rotationY ?? 0);
+    setThresholdInput(item.threshold !== null && item.threshold !== undefined ? String(item.threshold) : '');
 
     // Auto-fill default size from item.dimensions, item.size string, or standard 60x60 cm default
     let defaultW = 60;
@@ -172,6 +178,16 @@ export const ItemAssetCatalogTable: React.FC = () => {
     e.preventDefault();
     if (!editingItem) return;
 
+    let parsedThreshold: number | null = null;
+    if (thresholdInput.trim() !== '') {
+      const val = Number(thresholdInput);
+      if (isNaN(val) || val < 0 || !Number.isInteger(val)) {
+        alert('Stock Threshold must be a valid non-negative whole integer.');
+        return;
+      }
+      parsedThreshold = val;
+    }
+
     setSaving(true);
     setSaveSuccess(null);
     try {
@@ -196,6 +212,7 @@ export const ItemAssetCatalogTable: React.FC = () => {
           finish: finish || null,
           isEnabled,
           notes: notes || null,
+          threshold: parsedThreshold,
         }),
       });
 
@@ -287,6 +304,11 @@ export const ItemAssetCatalogTable: React.FC = () => {
     }
   };
 
+  const allCount = items.length;
+  const approvedCount = items.filter((i) => i.hasAssetEntry && i.isEnabled).length;
+  const pendingCount = items.filter((i) => !i.hasAssetEntry).length;
+  const disabledCount = items.filter((i) => i.hasAssetEntry && !i.isEnabled).length;
+
   const filteredItems = items.filter((item) => {
     const matchesSearch =
       item.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -296,7 +318,13 @@ export const ItemAssetCatalogTable: React.FC = () => {
     const matchesCategory = selectedCategoryId === 'ALL' ? true : item.categoryId === selectedCategoryId;
     const matchesSubcategory = selectedSubcategoryId === 'ALL' ? true : item.subcategoryId === selectedSubcategoryId;
 
-    return matchesSearch && matchesCategory && matchesSubcategory;
+    const matchesStatusTab =
+      statusTab === 'ALL' ? true :
+      statusTab === 'APPROVED' ? (item.hasAssetEntry && item.isEnabled) :
+      statusTab === 'PENDING' ? (!item.hasAssetEntry) :
+      statusTab === 'DISABLED' ? (item.hasAssetEntry && !item.isEnabled) : true;
+
+    return matchesSearch && matchesCategory && matchesSubcategory && matchesStatusTab;
   });
 
   const activeCategory = categories.find(c => c.id === selectedCategoryId);
@@ -321,6 +349,53 @@ export const ItemAssetCatalogTable: React.FC = () => {
           >
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
             <span>Reload Items</span>
+          </button>
+        </div>
+
+        {/* Status Tab Filters */}
+        <div className="flex border-b border-gray-200 mb-6 gap-2 overflow-x-auto">
+          <button
+            onClick={() => setStatusTab('ALL')}
+            className={`pb-3 px-3 text-[11px] font-bold tracking-wider uppercase transition-colors border-b-2 whitespace-nowrap ${
+              statusTab === 'ALL'
+                ? 'border-[#1A1A1A] text-[#1A1A1A]'
+                : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            All Items ({allCount})
+          </button>
+          <button
+            onClick={() => setStatusTab('APPROVED')}
+            className={`pb-3 px-3 text-[11px] font-bold tracking-wider uppercase transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap ${
+              statusTab === 'APPROVED'
+                ? 'border-emerald-600 text-emerald-800'
+                : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+            Approved / Active ({approvedCount})
+          </button>
+          <button
+            onClick={() => setStatusTab('PENDING')}
+            className={`pb-3 px-3 text-[11px] font-bold tracking-wider uppercase transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap ${
+              statusTab === 'PENDING'
+                ? 'border-amber-500 text-amber-800'
+                : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+            Pending Review ({pendingCount})
+          </button>
+          <button
+            onClick={() => setStatusTab('DISABLED')}
+            className={`pb-3 px-3 text-[11px] font-bold tracking-wider uppercase transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap ${
+              statusTab === 'DISABLED'
+                ? 'border-gray-500 text-gray-800'
+                : 'border-[#1A1A1A] border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-gray-400 inline-block"></span>
+            Disabled ({disabledCount})
           </button>
         </div>
 
@@ -360,7 +435,7 @@ export const ItemAssetCatalogTable: React.FC = () => {
                 setSelectedSubcategoryId(val);
               }}
               disabled={selectedCategoryId === 'ALL' || !activeCategory?.subcategories?.length}
-              className="bg-white border border-gray-200 px-4 py-2.5 text-xs text-[#1A1A1A] focus:outline-none focus:border-[#D4C5B9] min-w-[160px] disabled:opacity-50"
+              className="bg-[#1A1A1A] bg-white border border-gray-200 px-4 py-2.5 text-xs text-[#1A1A1A] focus:outline-none focus:border-[#D4C5B9] min-w-[160px] disabled:opacity-50"
             >
               <option value="ALL">All Subcategories</option>
               {activeCategory?.subcategories?.map((sub: any) => (
@@ -426,6 +501,7 @@ export const ItemAssetCatalogTable: React.FC = () => {
                   <th className="py-4 px-2">Category</th>
                   <th className="py-4 px-2 text-center">Image status</th>
                   <th className="py-4 px-2 text-center">GLB status</th>
+                  <th className="py-4 px-2 text-center">Stock Threshold</th>
                   <th className="py-4 px-2 text-center">Status</th>
                   <th className="py-4 px-2 text-right">Actions</th>
                 </tr>
@@ -464,6 +540,17 @@ export const ItemAssetCatalogTable: React.FC = () => {
                         <span className="inline-flex items-center gap-1 text-[9px] font-bold text-gray-400 uppercase tracking-widest">
                           <XCircle size={10} />
                           <span>No GLB</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-4 px-2 text-center">
+                      {item.threshold !== null && item.threshold !== undefined ? (
+                        <span className="px-2 py-0.5 text-[8.5px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full font-mono">
+                          {item.threshold} pcs
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-[8.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-full uppercase tracking-wider">
+                          Unconfigured
                         </span>
                       )}
                     </td>
@@ -646,6 +733,75 @@ export const ItemAssetCatalogTable: React.FC = () => {
 
             {/* Asset Metadata Configuration Form */}
             <form onSubmit={handleSaveAsset} className="space-y-5">
+
+              {/* Inventory & Stock Control Summary Card */}
+              <div className="bg-[#F9F9F7] p-4 border border-gray-200 rounded-sm space-y-3">
+                <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                  <span className="text-[10px] font-bold tracking-widest text-[#1A1A1A] uppercase">
+                    Inventory & Stock Control
+                  </span>
+                  {editingItem.threshold !== null &&
+                    editingItem.threshold !== undefined &&
+                    (editingItem.effectiveAvailable ?? editingItem.quantity) <= editingItem.threshold && (
+                      <span className="px-2 py-0.5 text-[8.5px] font-bold bg-amber-100 text-amber-800 border border-amber-300 rounded uppercase tracking-wider">
+                        ⚠️ Low Stock Warning
+                      </span>
+                    )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="bg-white p-2.5 border border-gray-200">
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block">
+                      Physical Stock
+                    </span>
+                    <span className="text-sm font-semibold font-mono text-[#1A1A1A] block mt-0.5">
+                      {editingItem.quantity} pcs
+                    </span>
+                    <span className="text-[8px] text-gray-400 font-light block mt-0.5">Live from OSPOS</span>
+                  </div>
+
+                  <div className="bg-white p-2.5 border border-gray-200">
+                    <span className="text-[9px] font-bold text-amber-700 uppercase tracking-wider block">
+                      Active Reserved
+                    </span>
+                    <span className="text-sm font-semibold font-mono text-amber-900 block mt-0.5">
+                      {editingItem.reservedQuantity ?? 0} pcs
+                    </span>
+                    <span className="text-[8px] text-gray-400 font-light block mt-0.5">Held by active orders</span>
+                  </div>
+
+                  <div className="bg-white p-2.5 border border-gray-200">
+                    <span className="text-[9px] font-bold text-emerald-700 uppercase tracking-wider block">
+                      Effective Available
+                    </span>
+                    <span className="text-sm font-semibold font-mono text-emerald-900 block mt-0.5">
+                      {editingItem.effectiveAvailable ?? editingItem.quantity} pcs
+                    </span>
+                    <span className="text-[8px] text-gray-400 font-light block mt-0.5">Physical minus reserved</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold tracking-widest text-[#1A1A1A] uppercase block mb-1">
+                    Stock Approval Threshold
+                  </label>
+                  <p className="text-[9.5px] text-gray-500 font-light mb-2">
+                    Minimum remaining quantity before an order requires administrator approval.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="e.g. 10 (Unconfigured)"
+                      className="w-full max-w-xs bg-white border border-gray-200 px-3 py-2 text-xs text-[#1A1A1A] font-mono focus:outline-none focus:border-[#D4C5B9]"
+                      value={thresholdInput}
+                      onChange={(e) => setThresholdInput(e.target.value)}
+                    />
+                    <span className="text-xs text-gray-500 font-mono">pcs</span>
+                  </div>
+                </div>
+              </div>
 
               {/* Scale configuration */}
               <div>

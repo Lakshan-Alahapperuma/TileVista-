@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from './AuthContext';
 import { UserPlus, LogIn, ShieldAlert, KeyRound, CheckCircle2, ArrowLeft } from 'lucide-react';
 
 export const AuthFeature: React.FC = () => {
   const { login, register } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectParam = searchParams.get('redirect');
 
   const [isRegister, setIsRegister] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -19,6 +21,40 @@ export const AuthFeature: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handlePostAuthRedirect = () => {
+    let role = '';
+    const savedUser = localStorage.getItem('tilevista_admin_user');
+    if (savedUser) {
+      try {
+        const userObj = JSON.parse(savedUser);
+        role = (userObj.role || '').toUpperCase();
+      } catch {
+        role = '';
+      }
+    }
+
+    const isAdmin = role === 'ADMIN' || role === 'ADMINISTRATOR';
+
+    if (isAdmin) {
+      // ADMIN: Only honor explicit admin subroutes (e.g. /admin/orders). Otherwise default to /admin/dashboard.
+      if (redirectParam && redirectParam.startsWith('/admin')) {
+        router.push(redirectParam);
+      } else {
+        router.push('/admin/dashboard');
+      }
+      return;
+    }
+
+    // CUSTOMER: Honor valid customer redirect parameters (e.g. /checkout, /account, /notifications).
+    if (redirectParam && !redirectParam.startsWith('/admin')) {
+      router.push(redirectParam);
+      return;
+    }
+
+    // CUSTOMER default destination: /dashboard
+    router.push('/dashboard');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,15 +91,7 @@ export const AuthFeature: React.FC = () => {
         });
 
         if (success) {
-          const savedUser = localStorage.getItem('tilevista_admin_user');
-          if (savedUser) {
-            const userObj = JSON.parse(savedUser);
-            if (userObj.role === 'ADMIN' || userObj.role === 'ADMINISTRATOR') {
-              router.push('/admin/dashboard');
-              return;
-            }
-          }
-          router.push('/designer');
+          handlePostAuthRedirect();
         } else {
           setError('Registration failed. Email might already be registered.');
         }
@@ -71,15 +99,7 @@ export const AuthFeature: React.FC = () => {
         // Login
         const success = await login(email, password);
         if (success) {
-          const savedUser = localStorage.getItem('tilevista_admin_user');
-          if (savedUser) {
-            const userObj = JSON.parse(savedUser);
-            if (userObj.role === 'ADMIN' || userObj.role === 'ADMINISTRATOR') {
-              router.push('/admin/dashboard');
-              return;
-            }
-          }
-          router.push('/designer');
+          handlePostAuthRedirect();
         } else {
           setError('Invalid login credentials.');
         }
