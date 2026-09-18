@@ -59,6 +59,7 @@ export interface DecisionRecommendation {
   recommendedAction: string;
   reason: string;
   priority: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+  trigger: 'BELOW_REORDER_LEVEL' | 'FORECAST_EXCEEDS_STOCK' | 'BOTH' | 'NONE';
 }
 
 

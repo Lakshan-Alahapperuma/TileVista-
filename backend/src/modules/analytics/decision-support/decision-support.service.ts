@@ -52,19 +52,29 @@ export class DecisionSupportService {
       let action = 'Stock is healthy. No action needed.';
       let priority: DecisionRecommendation['priority'] = 'NONE';
       let reason = 'Current stock and forecasted demand are balanced.';
+      let trigger: DecisionRecommendation['trigger'] = 'NONE';
+
+      // Evaluate CRITICAL_RESTOCK trigger conditions independently
+      const belowReorder = currentStock <= effectiveThreshold;
+      const forecastExceedsStock = currentStock < forecast30d;
 
       // Rule 1: CRITICAL_RESTOCK
-      if (currentStock <= effectiveThreshold || currentStock < forecast30d) {
+      if (belowReorder || forecastExceedsStock) {
         recType = 'CRITICAL_RESTOCK';
         priority = 'HIGH';
         const targetStock = forecast30d * coverageMultiplier;
         const roq = Math.max(0, targetStock - currentStock);
         action = `Reorder immediately. Recommended Order Qty (ROQ) = ${roq}.`;
-        
-        if (currentStock <= effectiveThreshold) {
-          reason = `Current stock (${currentStock}) has fallen to or below the operational reorder level (${effectiveThreshold}).`;
+
+        if (belowReorder && forecastExceedsStock) {
+          trigger = 'BOTH';
+          reason = `Current stock is at or below the OSPOS reorder level and forecast demand exceeds current stock.`;
+        } else if (belowReorder) {
+          trigger = 'BELOW_REORDER_LEVEL';
+          reason = `Current stock is at or below the OSPOS reorder level.`;
         } else {
-          reason = `Current stock (${currentStock}) is insufficient to cover the 30-day baseline forecast (${forecast30d}).`;
+          trigger = 'FORECAST_EXCEEDS_STOCK';
+          reason = `Forecast demand exceeds the current available stock.`;
         }
       } 
       // Rule 2: OVERSTOCK_CLEARANCE
@@ -93,6 +103,7 @@ export class DecisionSupportService {
         recommendedAction: action,
         reason,
         priority,
+        trigger,
       });
     }
 

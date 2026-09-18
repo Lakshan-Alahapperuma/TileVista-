@@ -12,6 +12,7 @@
   "dependencies": {
     "@react-three/drei": "^9.106.0",
     "@react-three/fiber": "^8.16.6",
+    "@tanstack/react-table": "^8.21.3",
     "@tilevista/types": "*",
     "axios": "^1.7.2",
     "lucide-react": "^0.390.0",

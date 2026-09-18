@@ -1,4 +1,4 @@
-﻿"""
+"""
 Part 4: AI Model Evaluation Script
 Baseline vs Single-Stage XGBoost vs Two-Stage XGBoost
 
@@ -49,8 +49,8 @@ LUMPY_PRODUCT_NAMES = {
     'Celeste Wall Hung Water Closet',
     'Exposed Thermostatic Shower Mixer - Chrome Finish',
 }
-
-REPORT_DIR = r'C:\Users\supun\.gemini\antigravity\brain\fc65b2b9-9206-4423-bbdd-796685eb7bde'
+REPORT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports')
+os.makedirs(REPORT_DIR, exist_ok=True)
 
 
 def get_demand_class(product_name):

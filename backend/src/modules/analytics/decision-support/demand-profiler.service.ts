@@ -72,10 +72,11 @@ export class DemandProfilerService {
       const adi = CANONICAL_DAYS / daysWithSales;
       const cv2 = meanDemand > 0 ? Math.pow(stdDev / meanDemand, 2) : 0;
 
-      let classification: 'Smooth' | 'Intermittent' | 'Erratic' | 'Lumpy' = 'Lumpy';
-      if (adi <= 1.32 && cv2 <= 0.49) classification = 'Smooth';
-      else if (adi > 1.32 && cv2 <= 0.49) classification = 'Intermittent';
-      else if (adi <= 1.32 && cv2 > 0.49) classification = 'Erratic';
+      let classification: 'Smooth' | 'Intermittent' | 'Erratic' | 'Lumpy';
+      if (adi < 1.32 && cv2 < 0.49) classification = 'Smooth';
+      else if (adi >= 1.32 && cv2 < 0.49) classification = 'Intermittent';
+      else if (adi < 1.32 && cv2 >= 0.49) classification = 'Erratic';
+      else classification = 'Lumpy'; // adi >= 1.32 && cv2 >= 0.49
 
       profiles.set(productId, {
         productId,
