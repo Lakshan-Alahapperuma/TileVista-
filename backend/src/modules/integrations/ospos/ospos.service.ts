@@ -16,6 +16,7 @@ export interface OsposItem {
   description: string;
   price: number;
   quantity: number;
+  reorder_level: number;
   brand?: string | null;
   color?: string | null;
   material?: string | null;
@@ -152,4 +153,97 @@ export class OsposIntegrationService {
       );
     }
   }
+
+  /**
+   * Fetches paginated sales line-item data from OSPOS with computed revenue, tax, and EAV attributes.
+   */
+  async fetchSalesData(params: {
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+    locationId?: number;
+    saleType?: number;
+  } = {}): Promise<OsposSalesResponse> {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.startDate) queryParams.set('start_date', params.startDate);
+      if (params.endDate) queryParams.set('end_date', params.endDate);
+      if (params.page) queryParams.set('page', String(params.page));
+      if (params.limit) queryParams.set('limit', String(params.limit));
+      if (params.locationId) queryParams.set('location_id', String(params.locationId));
+      if (params.saleType !== undefined) queryParams.set('sale_type', String(params.saleType));
+
+      const url = `${this.baseUrl}/sales?${queryParams.toString()}`;
+      this.logger.log(`Fetching sales data from OSPOS: ${url}`);
+
+      const response = await firstValueFrom(
+        this.httpService.get<OsposSalesResponse>(url, {
+          headers: {
+            Authorization: this.secretToken,
+            Accept: 'application/json',
+          },
+          timeout: 15000, // Sales queries may be heavier
+        }),
+      );
+
+      this.logger.log(
+        `Received ${response.data.data.length} sale line items (page ${response.data.pagination.page}/${response.data.pagination.totalPages})`,
+      );
+      return response.data;
+    } catch (error) {
+      this.logger.error(`Failed to fetch sales data from OSPOS: ${error.message}`);
+      return {
+        data: [],
+        pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+        summary: { totalRevenue: 0, totalTax: 0, totalTransactions: 0, dateRange: { start: '', end: '' } },
+      };
+    }
+  }
+}
+
+/**
+ * Typed interface for a single sale line item returned by GET /api/tilevista/sales.
+ */
+export interface OsposSaleItem {
+  sale_id: number;
+  sale_time: string;
+  sale_type: number;
+  customer_id: number | null;
+  employee_id: number;
+  invoice_number: string | null;
+  item_id: number;
+  line: number;
+  item_name: string;
+  sku: string;
+  category: string;
+  category_id: number | null;
+  quantity_purchased: number;
+  item_cost_price: number;
+  item_unit_price: number;
+  discount: number;
+  discount_type: number;
+  line_total: number;
+  tax_amount: number;
+  current_stock: number;
+  reorder_level: number;
+  brand: string | null;
+  color: string | null;
+  material: string | null;
+}
+
+export interface OsposSalesResponse {
+  data: OsposSaleItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  summary: {
+    totalRevenue: number;
+    totalTax: number;
+    totalTransactions: number;
+    dateRange: { start: string; end: string };
+  };
 }

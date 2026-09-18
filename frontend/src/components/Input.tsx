@@ -3,11 +3,13 @@ import * as React from 'react';
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  variant?: 'glass' | 'brutalist';
 }
 
 export const Input: React.FC<InputProps> = ({
   label,
   error,
+  variant,
   className = '',
   style,
   ...props
@@ -26,7 +28,17 @@ export const Input: React.FC<InputProps> = ({
     color: 'rgba(255, 255, 255, 0.7)',
   };
 
-  const inputStyles: React.CSSProperties = {
+  const inputStyles: React.CSSProperties = variant === 'brutalist' ? {
+    background: '#ffffff',
+    border: error ? '1px solid #ef4444' : '1px solid #E5E5E3',
+    borderRadius: '0px',
+    padding: '12px 16px',
+    color: '#1A1A1A',
+    outline: 'none',
+    fontSize: '1rem',
+    transition: 'border-color 0.2s ease',
+    ...style,
+  } : {
     background: 'rgba(0, 0, 0, 0.2)',
     border: error ? '1px solid #ef4444' : '1px solid rgba(255, 255, 255, 0.1)',
     borderRadius: '12px',

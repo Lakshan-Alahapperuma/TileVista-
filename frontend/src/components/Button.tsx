@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'accent' | 'danger';
+  variant?: 'primary' | 'secondary' | 'accent' | 'danger' | 'brutalist';
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -39,6 +39,15 @@ export const Button: React.FC<ButtonProps> = ({
           background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
           color: '#ffffff',
           boxShadow: '0 4px 14px 0 rgba(239, 68, 68, 0.4)',
+        };
+      case 'brutalist':
+        return {
+          background: '#1A1A1A',
+          color: '#ffffff',
+          border: '1px solid #1A1A1A',
+          borderRadius: '0px',
+          textTransform: 'uppercase' as const,
+          letterSpacing: '0.1em',
         };
     }
   };
