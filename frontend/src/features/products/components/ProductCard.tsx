@@ -19,20 +19,25 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({ product }) 
   const [showModal, setShowModal] = useState(false);
   const [quantity, setQuantity] = useState(1);
 
+  const availableStock = product.effectiveAvailable !== undefined ? product.effectiveAvailable : product.quantity;
+
   const handleAddToCartClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    setQuantity(1);
+    e.stopPropagation();
     setShowModal(true);
   };
 
-  const handleConfirmAdd = async () => {
+  const handleConfirmAddToCart = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setIsAdding(true);
     const res = await addItem(product.itemId, quantity);
     setIsAdding(false);
+    
     if (res.success) {
       setJustAdded(true);
       setShowModal(false);
-      setTimeout(() => setJustAdded(false), 2000);
+      setTimeout(() => setJustAdded(false), 2500);
     } else {
       alert(res.error || 'Failed to add item to cart');
     }
@@ -40,27 +45,22 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({ product }) 
 
   return (
     <>
-      <div className="group relative flex flex-col bg-white border border-gray-150 hover:border-[#1A1A1A] hover:shadow-lg transition-all duration-300 overflow-hidden">
-        {/* Clickable Product Image */}
-        <Link href={`/products/${getProductSlug(product)}`} className="relative w-full aspect-square bg-[#F9F9F7] overflow-hidden block">
-          <div
-            className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
-            style={{ backgroundImage: `url('${imageUrl}')` }}
-          />
+      <div className="group relative border border-gray-200 hover:border-gray-300 bg-white transition-all duration-300 flex flex-col h-full font-sans">
+        <Link href={`/products/${getProductSlug(product)}`} className="block relative aspect-square w-full bg-[#F9F9F7] overflow-hidden p-6">
+          <div className="w-full h-full flex items-center justify-center relative">
+            <img
+              src={imageUrl}
+              alt={product.name}
+              className="max-w-full max-h-full object-contain transition-transform duration-500 group-hover:scale-105"
+              loading="lazy"
+            />
+          </div>
 
-          {/* Top-Left Discount or Tile Size Overlay */}
-          <div className="absolute top-3 left-3 z-10 flex flex-col gap-1 items-start">
-            {(product as any).discountPercentage ? (
-              <span className="bg-[#C8102E] text-white font-bold text-[8.5px] uppercase tracking-wider px-2.5 py-1 shadow-sm">
-                {(product as any).discountPercentage}% OFF
-              </span>
-            ) : (product as any).discount ? (
-              <span className="bg-[#C8102E] text-white font-bold text-[8.5px] uppercase tracking-wider px-2.5 py-1 shadow-sm">
-                {(product as any).discount} OFF
-              </span>
-            ) : product.category.toLowerCase().includes('tile') && product.size ? (
-              <span className="bg-black/90 text-white font-mono font-bold text-[7.5px] uppercase tracking-wider px-2 py-0.5 shadow-sm">
-                {product.size}
+          {/* Badges Overlay */}
+          <div className="absolute top-3 left-3 flex flex-col gap-1 z-10">
+            {product.tags && product.tags.length > 0 ? (
+              <span className="bg-[#1A1A1A] text-white text-[9px] font-bold tracking-widest uppercase px-2.5 py-1">
+                {product.tags[0]}
               </span>
             ) : null}
           </div>
@@ -68,7 +68,7 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({ product }) 
           {/* Slide-up Add to Cart button on hover */}
           <button
             onClick={handleAddToCartClick}
-            disabled={product.quantity <= 0 || justAdded}
+            disabled={availableStock <= 0 || justAdded}
             className={`absolute bottom-0 inset-x-0 py-3 px-4 transition-transform duration-300 transform translate-y-full group-hover:translate-y-0 z-20 flex items-center justify-center gap-2 text-xs font-bold tracking-widest uppercase shadow-md ${
               justAdded ? 'bg-green-600 text-white' : 'bg-[#1A1A1A] hover:bg-[#D4C5B9] hover:text-[#1A1A1A] text-white'
             }`}
@@ -149,9 +149,9 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({ product }) 
                     {quantity}
                   </span>
                   <button
-                    onClick={() => setQuantity(q => Math.min(product.quantity, q + 1))}
+                    onClick={() => setQuantity(q => Math.min(availableStock, q + 1))}
                     className="flex-1 h-full text-gray-500 hover:text-black hover:bg-[#EAEAEA] transition-colors flex items-center justify-center disabled:opacity-30 disabled:hover:bg-transparent"
-                    disabled={quantity >= product.quantity}
+                    disabled={quantity >= availableStock}
                   >
                     <Plus size={16} />
                   </button>
@@ -160,7 +160,7 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({ product }) 
 
               <div className="flex gap-2 mb-8">
                 <button
-                  onClick={handleConfirmAdd}
+                  onClick={handleConfirmAddToCart}
                   disabled={isAdding}
                   className="flex-1 bg-[#757575] hover:bg-[#5C5C5C] text-white h-12 font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >

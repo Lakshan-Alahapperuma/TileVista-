@@ -5,7 +5,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 export interface UserSession {
   id: string;
   email: string;
-  role: 'ADMIN' | 'CUSTOMER';
+  role: 'ADMIN' | 'ADMINISTRATOR' | 'CUSTOMER';
   firstName?: string;
   lastName?: string;
 }

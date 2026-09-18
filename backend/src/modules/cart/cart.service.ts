@@ -108,9 +108,21 @@ export class CartService {
     const currentQuantity = existingItem ? existingItem.quantity : 0;
     const newQuantity = currentQuantity + quantity;
 
-    if (osposItem.quantity < newQuantity) {
+    const activeReservations = await this.prisma.inventory_reservations.aggregate({
+      _sum: { quantity: true },
+      where: {
+        ospos_item_id: osposItemId,
+        status: 'active',
+        expires_at: { gte: new Date() },
+      },
+    });
+
+    const reservedQuantity = activeReservations._sum.quantity || 0;
+    const effectiveAvailable = Math.max(0, osposItem.quantity - reservedQuantity);
+
+    if (effectiveAvailable < newQuantity) {
       throw new BadRequestException(
-        `Insufficient stock for "${osposItem.name}". Available: ${osposItem.quantity}.`,
+        `Insufficient available stock for "${osposItem.name}". Available to order: ${effectiveAvailable}.`,
       );
     }
 

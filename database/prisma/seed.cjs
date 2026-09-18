@@ -130,6 +130,14 @@ async function main() {
       },
     });
 
+    await prisma.stock_thresholds.create({
+      data: {
+        threshold_id: crypto.randomUUID(),
+        product_id: prodId,
+        threshold_value: 5,
+      },
+    });
+
     await prisma.asset_sizes.create({
       data: {
         size_id: crypto.randomUUID(),
