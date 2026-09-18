@@ -105,7 +105,9 @@ export default function PackageDetailPage({ params }: PageProps) {
               <p className="text-[10px] text-gray-400 font-light mt-0.5">Explore this curated layout and customize it directly.</p>
             </div>
           </div>
-          <Package3DViewer readOnly={true} />
+          <div className="w-full h-[600px] rounded-xl overflow-hidden">
+            <Package3DViewer pkg={pkg} readOnly={true} />
+          </div>
         </div>
       </div>
     </div>

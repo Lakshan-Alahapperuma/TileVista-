@@ -96,6 +96,7 @@ export class PackageRepository {
           description: data.description || '',
           cover_image: data.coverImage || '',
           discount_percentage: data.discountPercent,
+          design_data: data.designData ? (typeof data.designData === 'string' ? data.designData : JSON.stringify(data.designData)) : null,
           status: 'active',
         },
       });
@@ -127,6 +128,7 @@ export class PackageRepository {
           description: data.description,
           cover_image: data.coverImage,
           discount_percentage: data.discountPercent,
+          design_data: data.designData ? (typeof data.designData === 'string' ? data.designData : JSON.stringify(data.designData)) : undefined,
         },
       });
 

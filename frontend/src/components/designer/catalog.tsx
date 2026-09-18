@@ -246,6 +246,5 @@ export function getActiveCategories(designType: 'room' | 'bathroom', subRoomType
     { id: 'wall_tiles', label: 'Wall Tiles', icon: WALL_TILES_ICON },
     { id: 'floor_tiles', label: 'Floor Tiles', icon: FLOOR_TILES_ICON },
     { id: 'bathware_products', label: 'Add Product', icon: SINK_ICON },
-    { id: 'packages', label: 'Curated Packages', icon: PACKAGES_ICON },
   ];
 }

@@ -105,10 +105,7 @@ export default function AdminCreatePackagePage() {
   const floorTileItem = catalogItems.find(i => i.imageUrl && floorTextureUrl && floorTextureUrl.includes(i.imageUrl));
   const wallTileItem = catalogItems.find(i => i.imageUrl && wallTextureUrl && wallTextureUrl.includes(i.imageUrl));
   
-  const floorCost = floorTileItem ? floorTileItem.price : (floorTextureUrl ? 750 : 0);
-  const wallCost = wallTileItem ? wallTileItem.price : (wallTextureUrl ? 600 : 0);
-
-  const rawTotal = placedItemsTotal + floorCost + wallCost;
+  const rawTotal = placedItemsTotal;
   const activeDiscount = Math.min(100, Math.max(0, discountPercent || 0));
   const discountSavings = rawTotal * (activeDiscount / 100);
   const finalBundlePrice = Math.max(0, rawTotal - discountSavings);
@@ -126,10 +123,6 @@ export default function AdminCreatePackagePage() {
       const strKey = String(key);
       itemQuantityMap[strKey] = (itemQuantityMap[strKey] || 0) + 1;
     };
-
-    // Add assigned floor & wall tiles
-    if (floorTileItem) addQuantity(floorTileItem.itemId || (floorTileItem as any).osposItemId);
-    if (wallTileItem) addQuantity(wallTileItem.itemId || (wallTileItem as any).osposItemId);
 
     // Add 3D placed items
     (placedItems || []).forEach(placedItem => {
@@ -154,6 +147,19 @@ export default function AdminCreatePackagePage() {
       return alert('Please add at least one product or tile to the 3D room workspace before saving.');
     }
 
+    const designerState = useDesignerStore.getState();
+    const designDataPayload = {
+      wallDesigns: designerState.state?.wallDesigns || [],
+      wallTextureUrl: designerState.state?.wallTextureUrl || '',
+      floorTextureUrl: designerState.state?.floorTextureUrl || '',
+      floorColor: designerState.state?.floorColor || '#34383C',
+      widthFt: designerState.state?.widthFt || 12,
+      depthFt: designerState.state?.depthFt || 9,
+      heightFt: designerState.state?.heightFt || 8.5,
+      placedItems: designerState.placedItems || [],
+      wallOpenings: designerState.state?.wallOpenings || [],
+    };
+
     setSaving(true);
     try {
       await packageService.createPackage({
@@ -161,6 +167,7 @@ export default function AdminCreatePackagePage() {
         description,
         discountPercent: activeDiscount,
         coverImage,
+        designData: designDataPayload,
         packageItems: itemsArray as any,
       });
       alert('Package suite created successfully!');
@@ -181,26 +188,29 @@ export default function AdminCreatePackagePage() {
     );
   }
 
-  // Group placed 3D items by product name with live quantities
+  // Group placed 3D items by product name with live quantities & total costs
   const groupedActiveItems = React.useMemo(() => {
-    const map = new Map<string, { name: string; type: string; count: number }>();
+    const map = new Map<string, { name: string; type: string; count: number; totalCost: number }>();
     (placedItems || []).forEach(item => {
       const nameKey = (item.name || item.type || 'Item').trim();
+      const cost = item.cost || (item as any).price || 150;
       const existing = map.get(nameKey);
       if (existing) {
         existing.count += 1;
+        existing.totalCost += cost;
       } else {
         map.set(nameKey, {
           name: nameKey,
           type: item.type,
-          count: 1
+          count: 1,
+          totalCost: cost
         });
       }
     });
     return Array.from(map.values());
   }, [placedItems]);
 
-  const totalUniqueItemsCount = groupedActiveItems.length + (floorTileItem ? 1 : 0) + (wallTileItem ? 1 : 0);
+  const totalUniqueItemsCount = groupedActiveItems.length;
 
   return (
     <div className="space-y-6 font-sans max-w-[1700px] mx-auto pb-10">
@@ -380,22 +390,12 @@ export default function AdminCreatePackagePage() {
             </div>
 
             <div className="space-y-2 text-xs">
-              <div className="flex justify-between text-gray-400">
-                <span>3D Items Combined Total:</span>
-                <span className="font-mono">LKR {Math.round(placedItemsTotal).toLocaleString()}</span>
-              </div>
-              {floorTileItem && (
-                <div className="flex justify-between text-gray-400">
-                  <span>Floor Tile ({floorTileItem.name}):</span>
-                  <span className="font-mono">LKR {Math.round(floorTileItem.price).toLocaleString()}</span>
+              {groupedActiveItems.map((item, idx) => (
+                <div key={idx} className="flex justify-between text-gray-400">
+                  <span>{item.name}{item.count > 1 ? ` (x${item.count})` : ''}:</span>
+                  <span className="font-mono">LKR {Math.round(item.totalCost).toLocaleString()}</span>
                 </div>
-              )}
-              {wallTileItem && (
-                <div className="flex justify-between text-gray-400">
-                  <span>Wall Tile ({wallTileItem.name}):</span>
-                  <span className="font-mono">LKR {Math.round(wallTileItem.price).toLocaleString()}</span>
-                </div>
-              )}
+              ))}
               <div className="flex justify-between text-emerald-400">
                 <span>Bundle Discount Savings:</span>
                 <span className="font-mono">- LKR {Math.round(discountSavings).toLocaleString()}</span>
@@ -405,23 +405,12 @@ export default function AdminCreatePackagePage() {
                 <span className="font-mono font-bold text-xl text-white">LKR {Math.round(finalBundlePrice).toLocaleString()}</span>
               </div>
             </div>
-
             {/* Active Items Badge List */}
             <div className="pt-2 border-t border-gray-800">
               <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block mb-2">
                 Active 3D Room Items ({totalUniqueItemsCount})
               </span>
               <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto pr-1">
-                {floorTileItem && (
-                  <span className="bg-gray-800 text-gray-300 text-[10px] px-2 py-0.5 rounded flex items-center gap-1 border border-gray-700">
-                    <Layers3 size={10} className="text-[#D4C5B9]" /> Floor: {floorTileItem.name}
-                  </span>
-                )}
-                {wallTileItem && (
-                  <span className="bg-gray-800 text-gray-300 text-[10px] px-2 py-0.5 rounded flex items-center gap-1 border border-gray-700">
-                    <Layers size={10} className="text-[#D4C5B9]" /> Wall: {wallTileItem.name}
-                  </span>
-                )}
                 {groupedActiveItems.map((group, idx) => (
                   <span key={idx} className="bg-gray-800 text-gray-300 text-[10px] px-2 py-0.5 rounded flex items-center gap-1 border border-gray-700">
                     <Tag size={10} className="text-[#D4C5B9]" /> {group.name} {group.count > 1 ? `(x${group.count})` : ''}
@@ -429,6 +418,8 @@ export default function AdminCreatePackagePage() {
                 ))}
               </div>
             </div>
+
+
 
             <button 
               type="button"

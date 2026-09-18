@@ -17,6 +17,18 @@ export const PackageDetails: React.FC<PackageDetailsProps> = ({ pkg }) => {
     alert(`Successfully added curated package bundle "${pkg.name}" to your shopping cart!`);
   };
 
+  let origPrice = pkg.originalPrice || 0;
+  if (origPrice === 0) {
+    if (pkg.items && pkg.items.length > 0) {
+      origPrice = pkg.items.reduce((sum: number, i: any) => sum + (Number(i.price || 0) * (i.quantity || 1)), 0);
+    } else if (pkg.designData && Array.isArray(pkg.designData.placedItems)) {
+      origPrice = pkg.designData.placedItems.reduce((sum: number, i: any) => sum + Number(i.cost || i.price || 150), 0);
+    }
+  }
+
+  const discountPercent = pkg.discountPercent || 0;
+  const calcPrice = pkg.calculatedPrice > 0 ? pkg.calculatedPrice : (origPrice * (1 - discountPercent / 100));
+
   return (
     <div className="bg-white border border-gray-200 shadow-sm rounded-xl overflow-hidden font-sans p-6 md:p-8 space-y-6">
       {/* Banner / Cover */}
@@ -56,21 +68,21 @@ export const PackageDetails: React.FC<PackageDetailsProps> = ({ pkg }) => {
           <span className="text-[9px] font-bold tracking-widest text-gray-400 uppercase block mb-1">Total Bundle Price</span>
           <div className="flex items-baseline gap-2.5">
             <span className="text-2xl font-bold text-red-600 font-mono">
-              {formatLKR(pkg.calculatedPrice)}
+              {formatLKR(calcPrice)}
             </span>
-            {pkg.discountPercent > 0 && (
+            {discountPercent > 0 && (
               <span className="text-sm text-gray-400 line-through font-mono">
-                {formatLKR(pkg.originalPrice)}
+                {formatLKR(origPrice)}
               </span>
             )}
           </div>
         </div>
 
-        {pkg.discountPercent > 0 && (
+        {discountPercent > 0 && (
           <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 text-emerald-800 px-4 py-2 rounded-md">
             <Percent size={15} className="shrink-0" />
             <div className="text-xs">
-              <span className="font-bold block">Save {pkg.discountPercent}%</span>
+              <span className="font-bold block">Save {discountPercent}%</span>
               <span className="text-[9px] text-emerald-600 font-light block leading-none mt-0.5">Special bundle discount applied</span>
             </div>
           </div>

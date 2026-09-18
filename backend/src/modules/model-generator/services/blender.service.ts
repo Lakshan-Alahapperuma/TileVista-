@@ -70,14 +70,6 @@ export class BlenderService {
 
       let targetFile: string | undefined;
 
-      // Rule A: Category Keyword Matching
-      const isBathtub = /\b(tub|tubs|bathtub|bathtubs|bath|soaker|freestanding)\b/i.test(projectTags);
-      const isShower = /\b(shower|showers|mixer|faucet|tap|thermostatic|hand-shower|rain)\b/i.test(projectTags);
-      const isToilet = /\b(toilet|toilets|closet|wc|commode|water-closet)\b/i.test(projectTags);
-      const isHolder = /\b(holder|dish|soap|rack|hanger|accessory|towel)\b/i.test(projectTags);
-      const isMirror = /\b(mirror|mirrors|glass|framed|led)\b/i.test(projectTags);
-      const isBasin = /\b(basin|basins|sink|sinks|washbasin|wash-basin|vanity|bowl|countertop)\b/i.test(projectTags);
-
       // Deterministic hash helper for candidate selection within a category or fallback
       const getHashIndex = (seedStr: string, listLength: number) => {
         let hash = 0;
@@ -89,33 +81,36 @@ export class BlenderService {
       };
       const seedKey = projectId || projectTags || 'default';
 
-      if (isBathtub) {
-        const matches = templateGlbs.filter((f) => f.includes('bath-tub') || f.includes('tub') || f.includes('bath'));
-        targetFile = matches.length > 0 ? matches[getHashIndex(seedKey, matches.length)] : templateGlbs[0];
-        this.logger.log(`Matched Bathtub template asset: ${targetFile}`);
-      } else if (isShower) {
-        const matches = templateGlbs.filter((f) => f.includes('shower') || f.includes('mixer') || f.includes('faucet'));
-        targetFile = matches.length > 0 ? matches[getHashIndex(seedKey, matches.length)] : templateGlbs[0];
-        this.logger.log(`Matched Shower template asset: ${targetFile}`);
-      } else if (isToilet) {
-        const matches = templateGlbs.filter((f) => f.includes('water-closet') || f.includes('toilet') || f.includes('closet') || f.includes('commode'));
-        targetFile = matches.length > 0 ? matches[getHashIndex(seedKey, matches.length)] : templateGlbs[0];
-        this.logger.log(`Matched Toilet template asset: ${targetFile}`);
-      } else if (isHolder) {
-        const matches = templateGlbs.filter((f) => f.includes('holder') || f.includes('soap-dish') || f.includes('dish') || f.includes('soap'));
-        targetFile = matches.length > 0 ? matches[getHashIndex(seedKey, matches.length)] : templateGlbs[0];
-        this.logger.log(`Matched Accessory template asset: ${targetFile}`);
-      } else if (isMirror) {
-        const matches = templateGlbs.filter((f) => f.includes('mirror') || f.includes('glass'));
-        targetFile = matches.length > 0 ? matches[getHashIndex(seedKey, matches.length)] : templateGlbs[0];
-        this.logger.log(`Matched Mirror template asset: ${targetFile}`);
-      } else if (isBasin) {
-        const matches = templateGlbs.filter((f) => f.includes('basin') || f.includes('sink') || f.includes('wash-basin') || f.includes('cube'));
-        targetFile = matches.length > 0 ? matches[getHashIndex(seedKey, matches.length)] : templateGlbs[0];
-        this.logger.log(`Matched Wash Basin template asset: ${targetFile}`);
+      // Rule 0: Video Filename & Content Keyword Priority Override
+      // If the uploaded video file name or description specifies an object category (e.g. bathtub, tub, toilet, shower), match that asset directly!
+      const originalMatch = projectTags.match(/\(original:\s*([^)]+)\)/i);
+      const videoFilename = originalMatch ? originalMatch[1].toLowerCase() : '';
+      const contentContext = `${videoFilename} ${projectTags}`.toLowerCase();
+
+      const videoIsBathtub = /\b(tub|tubs|bathtub|bathtubs|bath|soaker|freestanding)\b/i.test(videoFilename) || (projectTags.includes('bathtub') || projectTags.includes('bath tub'));
+      const videoIsToilet  = /\b(toilet|toilets|closet|wc|commode|water-closet)\b/i.test(videoFilename);
+      const videoIsShower  = /\b(shower|showers|mixer|faucet|tap|thermostatic|hand-shower|rain)\b/i.test(videoFilename);
+      const videoIsMirror  = /\b(mirror|mirrors|glass|framed|led)\b/i.test(videoFilename);
+      const videoIsHolder  = /\b(holder|dish|soap|rack|hanger|accessory|towel)\b/i.test(videoFilename);
+
+      if (videoIsBathtub) {
+        targetFile = templateGlbs.find(f => f.includes('bath-tub') || f.includes('tub') || f.includes('bath'));
+        if (targetFile) this.logger.log(`Matched Bathtub template asset from video content: ${targetFile}`);
+      } else if (videoIsToilet) {
+        targetFile = templateGlbs.find(f => f.includes('water-closet') || f.includes('toilet') || f.includes('closet'));
+        if (targetFile) this.logger.log(`Matched Toilet template asset from video content: ${targetFile}`);
+      } else if (videoIsShower) {
+        targetFile = templateGlbs.find(f => f.includes('shower') || f.includes('mixer'));
+        if (targetFile) this.logger.log(`Matched Shower template asset from video content: ${targetFile}`);
+      } else if (videoIsMirror) {
+        targetFile = templateGlbs.find(f => f.includes('mirror') || f.includes('glass'));
+        if (targetFile) this.logger.log(`Matched Mirror template asset from video content: ${targetFile}`);
+      } else if (videoIsHolder) {
+        targetFile = templateGlbs.find(f => f.includes('holder') || f.includes('soap-dish'));
+        if (targetFile) this.logger.log(`Matched Accessory template asset from video content: ${targetFile}`);
       }
 
-      // Rule B: Match by explicit Item ID (e.g. "Item ID 35" or "item 42")
+      // Rule 1: Match by explicit Item ID (e.g. "Item ID 35" or "item 42")
       if (!targetFile) {
         const itemIdMatch = projectTags.match(/item\s*(?:id)?\s*[:#]?\s*(\d+)/i);
         if (itemIdMatch && itemIdMatch[1] && templateGlbs.length > 0) {
@@ -128,7 +123,7 @@ export class BlenderService {
         }
       }
 
-      // Rule C: Token matching against project tags (filtering out generic stop words)
+      // Rule 2: Token matching against project tags (e.g. "iris", "azza", "aqua", "3")
       if (!targetFile && projectTags && templateGlbs.length > 0) {
         const stopWords = new Set(['item', 'id', '3d', 'scan', 'model', 'original', 'video', 'project', 'description', 'the', 'and', 'for', 'with', 'tube', 'object', 'file']);
         const tagsTokens = projectTags
@@ -150,9 +145,48 @@ export class BlenderService {
             targetFile = file;
           }
         }
+        if (targetFile) {
+          this.logger.log(`Matched GLB template by token score (${bestScore}): ${targetFile}`);
+        }
       }
 
-      // Rule D: Dynamic Hash Fallback based on Project ID (Prevents returning the exact same item for every video)
+      // Rule 3: Category Keyword Matching
+      if (!targetFile) {
+        const isBathtub = /\b(tub|tubs|bathtub|bathtubs|bath|soaker|freestanding)\b/i.test(projectTags);
+        const isShower = /\b(shower|showers|mixer|faucet|tap|thermostatic|hand-shower|rain)\b/i.test(projectTags);
+        const isToilet = /\b(toilet|toilets|closet|wc|commode|water-closet)\b/i.test(projectTags);
+        const isHolder = /\b(holder|dish|soap|rack|hanger|accessory|towel)\b/i.test(projectTags);
+        const isMirror = /\b(mirror|mirrors|glass|framed|led)\b/i.test(projectTags);
+        const isBasin = /\b(basin|basins|sink|sinks|washbasin|wash-basin|vanity|bowl|countertop)\b/i.test(projectTags);
+
+        if (isBathtub) {
+          const matches = templateGlbs.filter((f) => f.includes('bath-tub') || f.includes('tub') || f.includes('bath'));
+          targetFile = matches.length > 0 ? matches[getHashIndex(seedKey, matches.length)] : templateGlbs[0];
+          this.logger.log(`Matched Bathtub template asset: ${targetFile}`);
+        } else if (isShower) {
+          const matches = templateGlbs.filter((f) => f.includes('shower') || f.includes('mixer') || f.includes('faucet'));
+          targetFile = matches.length > 0 ? matches[getHashIndex(seedKey, matches.length)] : templateGlbs[0];
+          this.logger.log(`Matched Shower template asset: ${targetFile}`);
+        } else if (isToilet) {
+          const matches = templateGlbs.filter((f) => f.includes('water-closet') || f.includes('toilet') || f.includes('closet') || f.includes('commode'));
+          targetFile = matches.length > 0 ? matches[getHashIndex(seedKey, matches.length)] : templateGlbs[0];
+          this.logger.log(`Matched Toilet template asset: ${targetFile}`);
+        } else if (isHolder) {
+          const matches = templateGlbs.filter((f) => f.includes('holder') || f.includes('soap-dish') || f.includes('dish') || f.includes('soap'));
+          targetFile = matches.length > 0 ? matches[getHashIndex(seedKey, matches.length)] : templateGlbs[0];
+          this.logger.log(`Matched Accessory template asset: ${targetFile}`);
+        } else if (isMirror) {
+          const matches = templateGlbs.filter((f) => f.includes('mirror') || f.includes('glass'));
+          targetFile = matches.length > 0 ? matches[getHashIndex(seedKey, matches.length)] : templateGlbs[0];
+          this.logger.log(`Matched Mirror template asset: ${targetFile}`);
+        } else if (isBasin) {
+          const matches = templateGlbs.filter((f) => f.includes('basin') || f.includes('sink') || f.includes('wash-basin') || f.includes('cube'));
+          targetFile = matches.length > 0 ? matches[getHashIndex(seedKey, matches.length)] : templateGlbs[0];
+          this.logger.log(`Matched Wash Basin template asset: ${targetFile}`);
+        }
+      }
+
+      // Rule 4: Dynamic Hash Fallback based on Project ID (Prevents returning the exact same item for every video)
       if (!targetFile && templateGlbs.length > 0) {
         const hashIdx = getHashIndex(seedKey, templateGlbs.length);
         targetFile = templateGlbs[hashIdx];

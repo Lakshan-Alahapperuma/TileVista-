@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useAuth } from '../auth/AuthContext';
 import { useRouter } from 'next/navigation';
 
-const STATIC_BASE = 'http://localhost:4000';
+const STATIC_BASE = process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api', '') : 'http://localhost:4000';
 
 export const CartFeature: React.FC = () => {
   const { items, loading, error, updateQuantity, removeItem, clearCart } = useCart();

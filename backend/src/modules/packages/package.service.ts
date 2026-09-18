@@ -70,6 +70,22 @@ export class PackageService {
       };
     });
 
+    let parsedDesignData = null;
+    if (pkg.design_data) {
+      try {
+        parsedDesignData = typeof pkg.design_data === 'string' ? JSON.parse(pkg.design_data) : pkg.design_data;
+      } catch (err) {
+        console.error('Failed to parse package design_data JSON:', err);
+      }
+    }
+
+    if (originalPrice === 0 && parsedDesignData && Array.isArray(parsedDesignData.placedItems)) {
+      parsedDesignData.placedItems.forEach((pi: any) => {
+        const cost = Number(pi.cost || pi.price || 150);
+        originalPrice += cost;
+      });
+    }
+
     const discountPercent = Number(pkg.discount_percentage || 0);
     const calculatedPrice = originalPrice * (1 - discountPercent / 100);
 
@@ -82,6 +98,7 @@ export class PackageService {
       calculatedPrice: Number(calculatedPrice.toFixed(2)),
       originalPrice: Number(originalPrice.toFixed(2)),
       items: enrichedItems,
+      designData: parsedDesignData,
       status: pkg.status,
       createdAt: pkg.created_at,
     };

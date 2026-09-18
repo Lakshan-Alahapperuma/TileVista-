@@ -23,8 +23,8 @@ import {
   MessageSquare,
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:4000/api';
-const POLL_INTERVAL_MS = 10_000; // Check every 10 seconds
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const POLL_INTERVAL_MS = 60_000; // Check every 60 seconds
 
 export default function AdminLayout({
   children,

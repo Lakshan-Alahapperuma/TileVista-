@@ -19,6 +19,7 @@ export interface Package {
   calculatedPrice: number;
   originalPrice: number;
   items: PackageItem[];
+  designData?: any;
   status?: string;
   createdAt?: string;
 }
@@ -28,8 +29,10 @@ export interface CreatePackagePayload {
   description?: string;
   discountPercent: number;
   coverImage?: string;
+  designData?: any;
   packageItems: {
-    productId: string;
+    productId?: string;
+    osposItemId?: number;
     quantity: number;
   }[];
 }

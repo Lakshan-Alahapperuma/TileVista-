@@ -30,6 +30,9 @@ export class CreatePackageDto {
   @IsOptional()
   coverImage?: string;
 
+  @IsOptional()
+  designData?: any;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => PackageItemDto)

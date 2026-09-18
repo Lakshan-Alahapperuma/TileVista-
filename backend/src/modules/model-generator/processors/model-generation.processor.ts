@@ -83,8 +83,17 @@ export class ModelGenerationProcessor extends WorkerHost {
       }
       await this.prisma.$transaction(async (tx) => {
         if (itemId && glbUrl) {
-          const product = await tx.products.findUnique({ where: { ospos_item_id: Number(itemId) } });
-          if (!product) throw new Error('Catalog item no longer exists.');
+          const numericItemId = Number(itemId);
+          let product = await tx.products.findUnique({ where: { ospos_item_id: numericItemId } });
+          if (!product) {
+            product = await tx.products.create({
+              data: {
+                product_id: randomUUID(),
+                ospos_item_id: numericItemId,
+                is_active: true,
+              },
+            });
+          }
           await tx.product_assets.upsert({
             where: { product_id: product.product_id },
             create: { asset_id: randomUUID(), product_id: product.product_id, glb_url: glbUrl },

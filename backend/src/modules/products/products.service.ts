@@ -494,27 +494,63 @@ export class ProductsService {
         include: { product_assets: true }
       });
     } else {
-      await this.prisma.products.update({
-        where: { ospos_item_id: osposItemId },
-        data: {
-          is_active: dto.isEnabled ?? undefined,
-          product_assets: {
-            update: {
-              material_type: dto.material ?? undefined,
-              color_family: dto.finish ?? undefined,
-              is_visible: dto.isEnabled ?? undefined,
-              asset_transformations: {
-                update: {
-                  scale_x: dto.scaleX ?? undefined,
-                  scale_y: dto.scaleY ?? undefined,
-                  scale_z: dto.scaleZ ?? undefined,
-                  rotation_y: dto.rotationY ?? undefined,
-                }
-              }
-            }
+      if (dto.isEnabled !== undefined) {
+        await this.prisma.products.update({
+          where: { ospos_item_id: osposItemId },
+          data: { is_active: dto.isEnabled }
+        });
+      }
+
+      let asset = product.product_assets;
+      if (!asset) {
+        const assetId = crypto.randomUUID();
+        asset = await this.prisma.product_assets.create({
+          data: {
+            asset_id: assetId,
+            product_id: product.product_id,
+            material_type: dto.material ?? null,
+            color_family: dto.finish ?? null,
+            is_visible: dto.isEnabled ?? true,
           }
-        }
+        });
+        product.product_assets = asset;
+      } else {
+        asset = await this.prisma.product_assets.update({
+          where: { asset_id: asset.asset_id },
+          data: {
+            material_type: dto.material ?? undefined,
+            color_family: dto.finish ?? undefined,
+            is_visible: dto.isEnabled ?? undefined,
+          }
+        });
+      }
+
+      const existingTransform = await this.prisma.asset_transformations.findUnique({
+        where: { asset_id: asset.asset_id }
       });
+
+      if (existingTransform) {
+        await this.prisma.asset_transformations.update({
+          where: { asset_id: asset.asset_id },
+          data: {
+            scale_x: dto.scaleX ?? undefined,
+            scale_y: dto.scaleY ?? undefined,
+            scale_z: dto.scaleZ ?? undefined,
+            rotation_y: dto.rotationY ?? undefined,
+          }
+        });
+      } else {
+        await this.prisma.asset_transformations.create({
+          data: {
+            transform_id: crypto.randomUUID(),
+            asset_id: asset.asset_id,
+            scale_x: dto.scaleX ?? 1.0,
+            scale_y: dto.scaleY ?? 1.0,
+            scale_z: dto.scaleZ ?? 1.0,
+            rotation_y: dto.rotationY ?? 0.0,
+          }
+        });
+      }
     }
 
     // Process asset_sizes if dimensions are specified

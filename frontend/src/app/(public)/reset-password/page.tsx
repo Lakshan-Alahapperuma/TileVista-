@@ -25,8 +25,8 @@ function ResetPasswordForm() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    if (newPassword.length < 8 || newPassword.length > 12) {
+      setError('Password must be between 8 and 12 characters long.');
       return;
     }
 
@@ -114,7 +114,7 @@ function ResetPasswordForm() {
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           className="w-full bg-[#F9F9F7] border border-gray-200 px-4 py-3.5 text-xs text-[#1A1A1A] focus:outline-none focus:border-[#D4C5B9] font-light transition-colors"
-          placeholder="At least 6 characters"
+          placeholder="8 - 12 characters"
         />
       </div>
 

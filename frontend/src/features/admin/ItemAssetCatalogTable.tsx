@@ -90,8 +90,8 @@ export const ItemAssetCatalogTable: React.FC = () => {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const glbInputRef = useRef<HTMLInputElement>(null);
 
-  const API_BASE = 'http://localhost:4000/api';
-  const STATIC_BASE = 'http://localhost:4000';
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+  const STATIC_BASE = process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api', '') : 'http://localhost:4000';
 
   const fetchItems = async () => {
     setLoading(true);

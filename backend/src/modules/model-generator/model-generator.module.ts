@@ -119,26 +119,35 @@ export class ModelGeneratorModule {
                             await fs.copyFile(outputGlbPath, destPath);
 
                             const glbUrl = `/uploads/models/${newFilename}`;
-                            const product = await prisma.products.findUnique({
+                            let product = await prisma.products.findUnique({
                               where: { ospos_item_id: numericItemId },
                               include: { product_assets: true },
                             });
 
-                            if (product) {
-                              if (product.product_assets) {
-                                await prisma.product_assets.update({
-                                  where: { asset_id: product.product_assets.asset_id },
-                                  data: { glb_url: glbUrl },
-                                });
-                              } else {
-                                await prisma.product_assets.create({
-                                  data: {
-                                    asset_id: randomUUID(),
-                                    product_id: product.product_id,
-                                    glb_url: glbUrl,
-                                  },
-                                });
-                              }
+                            if (!product) {
+                              product = await prisma.products.create({
+                                data: {
+                                  product_id: randomUUID(),
+                                  ospos_item_id: numericItemId,
+                                  is_active: true,
+                                },
+                                include: { product_assets: true },
+                              });
+                            }
+
+                            if (product.product_assets) {
+                              await prisma.product_assets.update({
+                                where: { asset_id: product.product_assets.asset_id },
+                                data: { glb_url: glbUrl },
+                              });
+                            } else {
+                              await prisma.product_assets.create({
+                                data: {
+                                  asset_id: randomUUID(),
+                                  product_id: product.product_id,
+                                  glb_url: glbUrl,
+                                },
+                              });
                             }
                           } catch (linkErr) {
                             console.error('Failed to auto-link GLB asset to item:', linkErr);

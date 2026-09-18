@@ -7,6 +7,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { promises as fs } from 'fs';
 import { join, extname } from 'path';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateModelProjectDto } from '../dto/create-model-project.dto';
 
@@ -30,8 +31,18 @@ export class ModelGeneratorService {
 
     if (dto.itemId) {
       const itemId = Number(dto.itemId);
-      if (!Number.isSafeInteger(itemId) || itemId < 1 || !await this.prisma.products.findUnique({ where: { ospos_item_id: itemId } })) {
-        throw new BadRequestException('Select an existing catalog item before generating its model.');
+      if (!Number.isSafeInteger(itemId) || itemId < 1) {
+        throw new BadRequestException('Invalid item ID.');
+      }
+      let product = await this.prisma.products.findUnique({ where: { ospos_item_id: itemId } });
+      if (!product) {
+        await this.prisma.products.create({
+          data: {
+            product_id: randomUUID(),
+            ospos_item_id: itemId,
+            is_active: true,
+          },
+        });
       }
     }
 

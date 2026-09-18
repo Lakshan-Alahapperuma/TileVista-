@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import React from 'react';
 import { X, RotateCw, Trash2, ArrowLeft, Maximize2 } from 'lucide-react';
 import { useDesignerStore } from '../../store/designer.store';
-import { DOOR_STYLES, WINDOW_STYLES, renderDoorIcon, ItemSidebarPreview } from './SharedDesignerEngine';
+import { DOOR_STYLES, WINDOW_STYLES, renderDoorIcon, ItemSidebarPreview, checkIsWallMounted, getDefaultMountHeight } from './SharedDesignerEngine';
 import { getActiveCategories, getActiveCatalog } from './catalog';
 import { remoteLog } from './SharedDesignerEngine';
 
@@ -118,15 +118,30 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
   const cancelPlacement = () => setIsPlacingItem(null);
 
   const handleDeleteItem = () => {
-    if (!selectedItemId) return;
-    if (placedItems.some(i => i.id === selectedItemId)) {
-      recordHistory(placedItems.filter(i => i.id !== selectedItemId));
-    } else {
-      setState((prev: any) => ({
-        ...prev,
-        wallOpenings: prev.wallOpenings.filter((op: any) => op.id !== selectedItemId)
-      }));
+    const store = useDesignerStore.getState();
+    const targetId = store.selectedItemId || selectedItemId;
+    if (!targetId) return;
+
+    const targetIdStr = String(targetId);
+    const currentPlaced = store.placedItems.length > 0 ? store.placedItems : placedItems;
+    const currentOpenings = store.state?.wallOpenings || state.wallOpenings || [];
+
+    const isPlaced = currentPlaced.some(i => String(i.id) === targetIdStr);
+    const isOpening = currentOpenings.some(op => String(op.id) === targetIdStr);
+
+    if (isPlaced || !isOpening) {
+      const nextPlaced = currentPlaced.filter(i => String(i.id) !== targetIdStr);
+      store.recordHistory(nextPlaced);
+      store.setPlacedItems(nextPlaced);
     }
+
+    if (isOpening || !isPlaced) {
+      const nextOpenings = currentOpenings.filter((op: any) => String(op.id) !== targetIdStr);
+      setState((prev: any) => ({ ...prev, wallOpenings: nextOpenings }));
+      store.setState({ wallOpenings: nextOpenings });
+    }
+
+    store.setSelectedItemId(null);
     setSelectedItemId(null);
   };
 
@@ -151,37 +166,6 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
     (selectedItem as any).name?.toLowerCase().includes('door')
   ) : false;
 
-  const checkIsWallMounted = (item: any) => {
-    if (!item) return false;
-    if (item.isWallMounted === true) return true;
-
-    const catId = item.categoryId !== null && item.categoryId !== undefined ? Number(item.categoryId) : null;
-    const subcatId = item.subcategoryId !== null && item.subcategoryId !== undefined ? Number(item.subcategoryId) : null;
-    const nameLower = (item.name || '').toLowerCase();
-    const catLower = (item.category || '').toLowerCase();
-
-    // Snaps all "Bath & Shower" (OSPOS subcategoryId 17) items to walls
-    if (subcatId === 17) {
-      // Exclude floor-standing enclosures/boxes
-      if (nameLower.includes('enclosure') || nameLower.includes('box') || nameLower.includes('cabin')) {
-        return false;
-      }
-      return true;
-    }
-
-    return (
-      (nameLower.includes('shower') && !nameLower.includes('enclosure') && !nameLower.includes('box') && !nameLower.includes('cabin')) ||
-      nameLower.includes('mirror') ||
-      nameLower.includes('towel') ||
-      nameLower.includes('soap') ||
-      nameLower.includes('paper') ||
-      nameLower.includes('hook') ||
-      nameLower.includes('holder') ||
-      (nameLower.includes('mixer') && catLower.includes('accessories')) ||
-      nameLower.includes('light')
-    );
-  };
-
   const handleAddItem = (type: string, dynamicItem?: any) => {
     const catalog = getActiveCatalog(state.designType, state.subRoomType || 'living_room');
     const cat = catalog.find((i: any) => i.type === type) || dynamicItem;
@@ -192,14 +176,16 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
     const STATIC_BASE = process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api', '') : 'http://localhost:4000';
     const fullModelUrl = modelUrl && modelUrl.startsWith('/uploads') ? `${STATIC_BASE}${modelUrl}` : modelUrl;
 
-    const isWallMounted = cat.isWallMounted || checkIsWallMounted(cat);
+    const isWallMounted = checkIsWallMounted(cat);
+    const itemType = cat.type || type;
+    const defaultY = isWallMounted ? getDefaultMountHeight(itemType, cat.name) : 0;
 
     setIsPlacingItem({
-      id: `${type}_${Date.now()}`,
-      type: cat.type || type,
+      id: `${itemType}_${Date.now()}`,
+      type: itemType,
       name: cat.name,
       cost: cat.cost || cat.price || 0,
-      position: [0, isWallMounted ? 1.37 : 0, 0],
+      position: [0, defaultY, 0],
       rotation: 0,
       isWallMounted: isWallMounted,
       color: selectedItemColor || '#FFFFFF',
@@ -223,7 +209,7 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
 
 
       {wizardStep === 5 && (
-        <div className={`absolute transition-all duration-300 ${activeCategory === 'bathware_products' ? 'right-[440px]' : 'right-6'} top-1/2 -translate-y-1/2 flex flex-col gap-4 z-30`}>
+        <div className={`absolute transition-all duration-300 ${activeCategory === 'bathware_products' ? 'right-4 sm:right-[440px]' : 'right-4 sm:right-6'} top-1/2 -translate-y-1/2 flex flex-col gap-4 z-30`}>
           {/* Home / exit */}
           <button
             id="btn-exit"
@@ -240,7 +226,7 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
           {/* Category icons */}
           <div className="bg-black rounded-xl p-1.5 shadow-2xl flex flex-col gap-1.5 border border-white/10">
             {getActiveCategories(state.designType, state.subRoomType)
-              .filter(cat => ['openings', 'wall_colours', 'ospos_tiles', 'wall_tiles', 'floor_tiles', 'bathware_products', 'packages'].includes(cat.id))
+              .filter(cat => ['openings', 'wall_colours', 'ospos_tiles', 'wall_tiles', 'floor_tiles', 'bathware_products'].includes(cat.id))
               .map(cat => (
                 <button
                   key={cat.id}
@@ -261,7 +247,7 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
 
       {/* ── ITEMS DRAWER (FLOATING DRAWER FOR TILES & OPENINGS) ── */}
       {activeCategory && activeCategory !== 'bathware_products' && (
-        <div className={`absolute right-20 top-1/2 -translate-y-1/2 ${['ospos_tiles', 'wall_tiles', 'floor_tiles', 'packages'].includes(activeCategory) ? 'w-[360px]' : 'w-64'} bg-white/95 backdrop-blur-md border border-gray-100 shadow-2xl rounded-2xl p-5 z-30 font-sans flex flex-col gap-4`}>
+        <div className={`absolute right-4 sm:right-20 top-1/2 -translate-y-1/2 ${['ospos_tiles', 'wall_tiles', 'floor_tiles', 'packages'].includes(activeCategory) ? 'w-full sm:w-[360px] max-w-[calc(100vw-4rem)]' : 'w-full sm:w-64 max-w-[calc(100vw-4rem)]'} bg-white/95 backdrop-blur-md border border-gray-100 shadow-2xl rounded-2xl p-5 z-30 font-sans flex flex-col gap-4`}>
           <div className="flex justify-between items-center border-b border-gray-100 pb-2.5">
             <h3 className="text-xs font-bold tracking-wider text-[#1A1A1A] uppercase">
               {activeCategory === 'wall_tiles' ? 'Wall Tiles' :
@@ -357,7 +343,9 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
 
                                 if (category.includes('basin') || category.includes('sink') || name.includes('basin') || name.includes('sink') || name.includes('vanity')) {
                                   type = 'sink';
-                                  position = [-0.6 + (sinkCount * 1.2), 0, -1.0];
+                                  isWallMounted = checkIsWallMounted(matchedItem);
+                                  const defaultY = isWallMounted ? getDefaultMountHeight(type, matchedItem.name) : 0;
+                                  position = [-0.6 + (sinkCount * 1.2), defaultY, -1.0];
                                   rotation = 0;
                                   sinkCount++;
                                 } else if (category.includes('closet') || category.includes('toilet') || category.includes('wc') || name.includes('closet') || name.includes('toilet') || name.includes('wc') || name.includes('commode')) {
@@ -470,7 +458,7 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
                       type="number"
                       step="0.1"
                       min="0.1"
-                      className="w-16 bg-white border border-gray-200 rounded text-xs px-2 py-1 outline-none focus:border-black transition-colors"
+                      className="w-16 bg-white border border-gray-300 text-black font-bold text-xs font-mono px-2 py-1 outline-none focus:border-black transition-colors rounded shadow-sm"
                       value={coverageHeightInput}
                       onChange={(e) => {
                         const strVal = e.target.value;
@@ -696,7 +684,7 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
 
 
       {activeCategory === 'bathware_products' && (
-        <div className="fixed right-0 top-0 bottom-0 h-screen w-[420px] bg-white border-l border-gray-200 shadow-2xl z-40 flex flex-col font-sans transition-all duration-300">
+        <div className="fixed right-0 top-0 bottom-0 h-screen w-full sm:w-[420px] max-w-full bg-white border-l border-gray-200 shadow-2xl z-40 flex flex-col font-sans transition-all duration-300">
           {selectedProductDetails ? (
             /* DETAILED VIEW (showing product info with action controls) */
             <div className="flex-1 flex flex-col h-full bg-white">

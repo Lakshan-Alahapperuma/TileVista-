@@ -19,7 +19,7 @@ export default function PropertyPanel() {
   if (!store.selectedItemId || !selectedItem) return null;
 
   return (
-    <div className="absolute top-24 right-[380px] w-64 bg-white/95 backdrop-blur-xl border border-gray-200 shadow-2xl rounded-2xl overflow-hidden z-20 animate-in fade-in slide-in-from-right-4 duration-300">
+    <div className="absolute top-20 sm:top-24 right-4 sm:right-[440px] w-64 max-w-[calc(100vw-2rem)] bg-white/95 backdrop-blur-xl border border-gray-200 shadow-2xl rounded-2xl overflow-hidden z-20 animate-in fade-in slide-in-from-right-4 duration-300">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
         <h3 className="font-bold text-sm tracking-wide text-gray-900 uppercase">Properties</h3>
         <button onClick={() => store.setSelectedItemId(null)} className="p-1 hover:bg-gray-200 rounded-full transition-colors"><X className="w-4 h-4 text-gray-500" /></button>
@@ -57,11 +57,16 @@ export default function PropertyPanel() {
         <div className="pt-2 border-t border-gray-100">
           <button
             onClick={() => {
+              const targetId = store.selectedItemId;
+              if (!targetId) return;
+              const targetIdStr = String(targetId);
+
               if (selectedItem.isOpening) {
-                store.setState({ wallOpenings: store.state.wallOpenings.filter(o => o.id !== store.selectedItemId) });
+                store.setState({ wallOpenings: store.state.wallOpenings.filter(o => String(o.id) !== targetIdStr) });
               } else {
-                store.recordHistory(store.placedItems);
-                store.setPlacedItems(prev => prev.filter(i => i.id !== store.selectedItemId));
+                const nextItems = store.placedItems.filter(i => String(i.id) !== targetIdStr);
+                store.recordHistory(nextItems);
+                store.setPlacedItems(nextItems);
               }
               store.setSelectedItemId(null);
             }}

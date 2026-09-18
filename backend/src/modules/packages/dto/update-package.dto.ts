@@ -19,6 +19,9 @@ export class UpdatePackageDto {
   @IsOptional()
   coverImage?: string;
 
+  @IsOptional()
+  designData?: any;
+
   @IsArray()
   @IsOptional()
   @ValidateNested({ each: true })

@@ -564,6 +564,180 @@ const isSink = (type?: string, name?: string) => {
   return t === 'sink' || t === 'basin' || n.includes('sink') || n.includes('basin');
 };
 
+export function getDefaultMountHeight(type?: string, name?: string): number {
+  const t = (type || '').toLowerCase();
+  const n = (name || '').toLowerCase();
+
+  if (t === 'sink' || t === 'basin' || n.includes('sink') || n.includes('basin')) {
+    return 0.85; // Ergonomic 85cm height from floor for wall-hung wash basins
+  }
+  if (t === 'toilet' || n.includes('toilet') || n.includes('closet') || n.includes('wc') || n.includes('commode')) {
+    return 0.45; // Ergonomic 45cm height from floor for wall-hung toilets
+  }
+  if (t === 'shower' || n.includes('shower') || n.includes('mixer')) {
+    if (n.includes('column') || n.includes('riser') || n.includes('system') || n.includes('exposed') || n.includes('thermostatic')) {
+      return 1.00; // Exposed column base at 1.0m -> top rain head reaches 2.10m
+    }
+    return 2.10; // Wall rain shower head / arm / hand shower: mounted overhead at 2.10m
+  }
+  if (t === 'mirror' || n.includes('mirror') || t === 'light' || n.includes('light')) {
+    return 1.45; // Eye-level height for mirrors & vanity lights
+  }
+  if (t === 'towel_rail' || n.includes('towel') || n.includes('holder') || n.includes('soap') || n.includes('paper') || n.includes('hook')) {
+    return 1.10; // Accessories / towel rail height
+  }
+  return 0.85; // Default fallback wall mount height
+}
+
+export function checkIsWallMounted(item: any): boolean {
+  if (!item) return false;
+
+  const nameLower = (item.name || '').toLowerCase();
+  const catLower = (item.category || '').toLowerCase();
+  const typeLower = (item.type || '').toLowerCase();
+  const subcatId = item.subcategoryId !== null && item.subcategoryId !== undefined ? Number(item.subcategoryId) : null;
+
+  // 1. Explicit floor items (pedestals, floor closets, bathtubs, enclosures)
+  if (
+    nameLower.includes('floor mounted') ||
+    nameLower.includes('floor-mounted') ||
+    nameLower.includes('pedestal') ||
+    nameLower.includes('freestanding') ||
+    nameLower.includes('free standing') ||
+    nameLower.includes('enclosure') ||
+    nameLower.includes('bathtub') ||
+    nameLower.includes('bath tub') ||
+    nameLower.includes('cabin') ||
+    nameLower.includes('box') ||
+    typeLower === 'bathtub'
+  ) {
+    return false;
+  }
+
+  // 2. Explicit wall-mounted flag if specified
+  if (item.isWallMounted === true) return true;
+  if (item.isWallMounted === false) return false;
+
+  // 3. Known wall-mounted item keywords (wall-hung sinks, dew point, mirrors, towel rails, lights, wall toilets)
+  if (
+    nameLower.includes('wall') ||
+    nameLower.includes('hung') ||
+    nameLower.includes('wall-hung') ||
+    nameLower.includes('wall mounted') ||
+    nameLower.includes('dew point') ||
+    nameLower.includes('half pedestal') ||
+    nameLower.includes('floating') ||
+    nameLower.includes('mirror') ||
+    nameLower.includes('towel') ||
+    nameLower.includes('soap') ||
+    nameLower.includes('paper') ||
+    nameLower.includes('hook') ||
+    nameLower.includes('holder') ||
+    nameLower.includes('light') ||
+    (nameLower.includes('shower') && !nameLower.includes('enclosure') && !nameLower.includes('box')) ||
+    subcatId === 17
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function calculateRealWorldScale(item: any, size: THREE.Vector3): number {
+  if (!size || size.x <= 0 || size.y <= 0 || size.z <= 0) return 1.0;
+
+  const t = (item.type || '').toLowerCase();
+  const nameLower = (item.name || '').toLowerCase();
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const horizDim = Math.max(size.x, size.z);
+
+  // Target physical dimensions in real-world METERS
+  let targetWorldMeters = 0.60;
+  let scaleDimension = maxDim; // Default to max dimension of GLB model
+
+  if (isSink(t, nameLower)) {
+    const aspectRatio = size.y / horizDim;
+    if (aspectRatio < 0.75 || checkIsWallMounted(item)) {
+      // Wall-hung basin / counter basin: scale width to 0.60 meters (60 cm)
+      targetWorldMeters = 0.60;
+      scaleDimension = horizDim;
+    } else {
+      // Pedestal basin: scale total height to 0.85 meters (85 cm)
+      targetWorldMeters = 0.85;
+      scaleDimension = size.y;
+    }
+  } else if (t === 'toilet' || nameLower.includes('toilet') || nameLower.includes('closet') || nameLower.includes('wc') || nameLower.includes('commode')) {
+    const aspectRatio = size.y / horizDim;
+    if (aspectRatio < 0.80 || nameLower.includes('wall')) {
+      targetWorldMeters = 0.55; // Wall-hung toilet: 55 cm depth
+      scaleDimension = horizDim;
+    } else {
+      targetWorldMeters = 0.75; // Floor toilet with tank: 75 cm height
+      scaleDimension = size.y;
+    }
+  } else if (isBathtub(t, nameLower)) {
+    targetWorldMeters = 1.65; // Bathtub length: 165 cm
+    scaleDimension = horizDim;
+  } else if (isShower(t, nameLower)) {
+    if (nameLower.includes('enclosure') || nameLower.includes('box') || nameLower.includes('cabin')) {
+      targetWorldMeters = 2.00; // Shower glass box / enclosure height: 200 cm
+      scaleDimension = size.y;
+    } else if (nameLower.includes('column') || nameLower.includes('riser') || nameLower.includes('system') || nameLower.includes('exposed') || nameLower.includes('thermostatic') || (size.y / horizDim) > 1.8) {
+      targetWorldMeters = 1.15; // Tall shower column height: 115 cm
+      scaleDimension = size.y;
+    } else {
+      // Wall rain shower arm / head / hand shower set:
+      // Sized prominently to 0.55 meters (55 cm reach/size) so it looks prominent and natural
+      targetWorldMeters = 0.55;
+      scaleDimension = maxDim;
+    }
+  } else if (t === 'washing_machine' || nameLower.includes('wash') || nameLower.includes('machine')) {
+    targetWorldMeters = 0.85; // Washing machine height: 85 cm
+    scaleDimension = size.y;
+  } else if (t === 'mirror' || nameLower.includes('mirror')) {
+    targetWorldMeters = 0.75; // Mirror max dimension: 75 cm
+    scaleDimension = maxDim;
+  } else if (t === 'light' || nameLower.includes('light')) {
+    targetWorldMeters = 0.35; // Light max dimension: 35 cm
+    scaleDimension = maxDim;
+  } else if (t === 'towel_rail' || nameLower.includes('towel') || nameLower.includes('holder') || nameLower.includes('soap') || nameLower.includes('paper') || nameLower.includes('hook')) {
+    targetWorldMeters = 0.50; // Accessories max dimension: 50 cm
+    scaleDimension = maxDim;
+  } else if (t === 'beds' || t === 'bed') {
+    targetWorldMeters = 2.00; // Bed length/width: 200 cm
+    scaleDimension = horizDim;
+  } else if (t === 'sofa' || t === 'sofas') {
+    targetWorldMeters = 2.10; // Sofa length: 210 cm
+    scaleDimension = horizDim;
+  } else if (t === 'wardrobes' || t === 'wardrobe') {
+    targetWorldMeters = 2.10; // Wardrobe height: 210 cm
+    scaleDimension = size.y;
+  } else if (t === 'table' || t === 'dressing_table') {
+    targetWorldMeters = 1.50; // Table length: 150 cm
+    scaleDimension = horizDim;
+  } else if (t === 'chair' || t === 'chairs') {
+    targetWorldMeters = 0.90; // Chair height: 90 cm
+    scaleDimension = size.y;
+  } else if (t === 'tv_cabinet' || t === 'cabinet') {
+    targetWorldMeters = 1.50; // Cabinet length: 150 cm
+    scaleDimension = horizDim;
+  } else if (t === 'coffee_table') {
+    targetWorldMeters = 1.00; // Coffee table length: 100 cm
+    scaleDimension = horizDim;
+  } else {
+    targetWorldMeters = 0.80; // Default fallback: 80 cm
+    scaleDimension = maxDim;
+  }
+
+  // Convert targetWorldMeters to target size in group internal units (divided by 0.3048)
+  const targetGroupSize = targetWorldMeters / 0.3048;
+
+  if (scaleDimension > 0 && scaleDimension !== Infinity && !isNaN(scaleDimension)) {
+    return targetGroupSize / scaleDimension;
+  }
+  return 1.0;
+}
+
 function DynamicFurnitureModel({ item, selected, CustomFurniture }: { item: any, selected: boolean, CustomFurniture?: any }) {
   // If a GLB model exists, ALWAYS prioritize it over the procedural models
   if (item.model) {
@@ -608,53 +782,33 @@ function GLBModel({ url, selected, item }: { url: string, selected: boolean, ite
     const box = new THREE.Box3().setFromObject(clone);
     const size = new THREE.Vector3();
     box.getSize(size);
-    const maxDim = Math.max(size.x, size.y, size.z);
 
-    let targetSize = 3.0;
-    const t = item.type;
-    // Set dimensions compensating for the 0.3048 parent group scale (so 2.1m -> ~6.9)
-    if (t === 'beds' || t === 'bed') targetSize = 6.9;
-    else if (t === 'wardrobes' || t === 'wardrobe') targetSize = 4.0;
-    else if (t === 'sofa' || t === 'sofas') targetSize = 7.0;
-    else if (t === 'table' || t === 'dressing_table') targetSize = 5.0;
-    else if (t === 'chair' || t === 'chairs') targetSize = 2.0;
-    else if (t === 'tv_cabinet' || t === 'cabinet') targetSize = 5.0;
-    else if (t === 'coffee_table') targetSize = 3.5;
-    else if (isBathtub(t, item.name)) targetSize = 6.8;
-    else if (isShower(t, item.name)) targetSize = 3.3;
-    else if (t === 'toilet') targetSize = 2.6;
-    else if (isSink(t, item.name)) targetSize = 2.8;
-    else if (t === 'washing_machine') targetSize = 2.8;
-    else if (t === 'towel_rail') targetSize = 2.0;
-    else if (t === 'light') targetSize = 0.8;
+    let scale = calculateRealWorldScale(item, size);
 
-    // Cap the targetSize based on room size so items don't overflow small rooms
+    // Cap scale based on room size so items don't overflow small rooms
     if (state && state.widthFt && state.depthFt) {
       const wMeters = state.widthFt * 0.3048;
       const dMeters = state.depthFt * 0.3048;
       const maxRoomDim = Math.min(Math.max(1.5, wMeters), Math.max(1.5, dMeters));
 
-      // Target world size is targetSize * 0.3048. It should not exceed 80% (95% for bathtubs, beds, sofas) of the room's smallest dimension
-      const limitFactor = (isBathtub(t, item.name) || t === 'beds' || t === 'bed' || t === 'sofa' || t === 'sofas') ? 0.95 : 0.8;
+      const limitFactor = (isBathtub(item.type, item.name) || item.type === 'beds' || item.type === 'bed' || item.type === 'sofa' || item.type === 'sofas') ? 0.95 : 0.85;
       const maxTargetWorldSize = maxRoomDim * limitFactor;
-      const currentTargetWorldSize = targetSize * 0.3048;
+      const currentTargetWorldSize = (Math.max(size.x, size.y, size.z) * scale) * 0.3048;
 
       if (currentTargetWorldSize > maxTargetWorldSize) {
-        targetSize = maxTargetWorldSize / 0.3048;
+        scale = scale * (maxTargetWorldSize / currentTargetWorldSize);
       }
     }
 
-    console.log("GLB MaxDim:", maxDim, "TargetSize:", targetSize);
-    if (maxDim > 0 && maxDim !== Infinity && !isNaN(maxDim)) {
-      const scale = targetSize / maxDim;
-
+    console.log("GLB Size:", size, "Scale:", scale);
+    if (scale > 0 && scale !== Infinity && !isNaN(scale)) {
       // Apply base scale and custom asset scale transformations if defined
       const sx = item.scale?.x ? Number(item.scale.x) : 1;
       const sy = item.scale?.y ? Number(item.scale.y) : 1;
       const sz = item.scale?.z ? Number(item.scale.z) : 1;
       clone.scale.set(scale * sx, scale * sy, scale * sz);
     } else {
-      console.warn("Invalid maxDim for GLB", maxDim);
+      console.warn("Invalid scale for GLB", scale);
     }
 
     // Apply custom asset rotation transformations if defined
@@ -694,8 +848,8 @@ function GLBModel({ url, selected, item }: { url: string, selected: boolean, ite
     return { clone, finalSize, finalCenter: [0, finalSize.y / 2, 0] };
   }, [scene, item.type]);
 
-  const modelRotation = item.isWallMounted ? [0, 0, 0] : [0, 0, 0];
-  const position = item.isWallMounted ? [0, 1, 0] : [0, 0.01, 0];
+  const modelRotation = [0, 0, 0];
+  const position = [0, 0, 0];
 
   return (
     <group position={position as any} rotation={modelRotation as any}>
@@ -729,7 +883,7 @@ export const globalItemDimensions = new Map<string, { width: number, depth: numb
 
 function FallbackColoredBox({ item, selected }: { item: any, selected: boolean }) {
   const rotation = item.isWallMounted ? [0, 0, 0] : [-Math.PI / 2, 0, 0];
-  const position = item.isWallMounted ? [0, 1, 0] : [0, 0.01, 0];
+  const position = [0, 0, 0];
   const itemColor = item.color || '#FFFFFF';
   return (
     <group>
@@ -750,7 +904,7 @@ function FallbackColoredBox({ item, selected }: { item: any, selected: boolean }
 function ImageTextureModel({ url, item, selected }: { url: string, item: any, selected: boolean }) {
   const texture = useLoader(THREE.TextureLoader, url) as THREE.Texture;
   const rotation = item.isWallMounted ? [0, 0, 0] : [-Math.PI / 2, 0, 0];
-  const position = item.isWallMounted ? [0, 1, 0] : [0, 0.01, 0];
+  const position = [0, 0, 0];
   const itemColor = item.color || '#FFFFFF';
   return (
     <group>
@@ -2832,7 +2986,7 @@ function BathroomScene({
       let heightY = 0;
       const isBathtubItem = isBathtub(itemToMove.type, itemToMove.name);
       const isShowerItem = isShower(itemToMove.type, itemToMove.name);
-      const isWallMounted = isBathtubItem ? false : (itemToMove.isWallMounted || isShowerItem);
+      const isWallMounted = isBathtubItem ? false : checkIsWallMounted(itemToMove);
 
       if (isWallMounted) {
         const wallIdx = selectedRoomType === 'bathroom' ? undefined : undefined;
@@ -2869,16 +3023,21 @@ function BathroomScene({
           new THREE.Vector3(wallCx, 0, wallCz)
         );
         const wallPt = new THREE.Vector3();
-        let itemHeight = 1.5; // fallback
-        if (isShowerItem) {
-          itemHeight = 2.1; // Procedural shower height
+        let itemHeight = 0.35; // fallback item height
+        const nameLower = (itemToMove.name || '').toLowerCase();
+        const isColumnShower = isShowerItem && (nameLower.includes('column') || nameLower.includes('riser') || nameLower.includes('system') || nameLower.includes('exposed') || nameLower.includes('thermostatic'));
+
+        if (isShowerItem && (nameLower.includes('enclosure') || nameLower.includes('box') || nameLower.includes('cabin'))) {
+          itemHeight = 2.0;
+        } else if (isColumnShower) {
+          itemHeight = 1.15;
         } else if (dims && dims.height) {
           itemHeight = dims.height;
         }
 
-        const minH = isShowerItem ? 1.0 : 0.1;
-        const maxH = Math.max(minH, h - itemHeight - 0.10);
-        heightY = 1.37;
+        const minH = 0.1;
+        const maxH = Math.max(minH, h - (isColumnShower ? (itemHeight + 0.10) : 0.15));
+        heightY = getDefaultMountHeight(itemToMove.type, itemToMove.name);
         if (raycasterRef.ray.intersectPlane(wallPlane, wallPt)) {
           heightY = Math.max(minH, Math.min(maxH, wallPt.y));
         }
@@ -4556,6 +4715,7 @@ function RoomPreview3D({
         const z = wall.p1[1] + uz * opening.positionOffset - nz * (thickness / 2);
 
         const isThisDragged = draggingOpeningId === opening.id;
+        const isSelected = selectedItemId === opening.id || isThisDragged;
 
         return (
           <group
@@ -4566,6 +4726,7 @@ function RoomPreview3D({
             onPointerDown={(e) => {
               if (!showOpeningsEditor) return;
               e.stopPropagation();
+              setSelectedItemId?.(opening.id);
               try {
                 if (e.nativeEvent?.target && 'setPointerCapture' in (e.nativeEvent.target as any)) {
                   (e.nativeEvent.target as any).setPointerCapture(e.pointerId);
@@ -4618,8 +4779,8 @@ function RoomPreview3D({
               if (draggingOpeningId === opening.id) {
                 e.stopPropagation();
                 try {
-                  if (e.nativeEvent?.target && 'releasePointerCapture' in (e.nativeEvent.target as any)) {
-                    (e.nativeEvent.target as any).releasePointerCapture(e.pointerId);
+                  if (e.target && 'releasePointerCapture' in (e.target as any)) {
+                    (e.target as any).releasePointerCapture(e.pointerId);
                   }
                 } catch (_) {}
                 setDraggingOpeningId(null);
@@ -4632,9 +4793,15 @@ function RoomPreview3D({
             ) : (
               <Window3D style={opening.style} width={opening.width} height={opening.height} depth={thickness} />
             )}
+            {isSelected && (
+              <mesh position={[0, opening.height / 2, 0]}>
+                <boxGeometry args={[opening.width + 0.05, opening.height + 0.05, thickness + 0.02]} />
+                <meshBasicMaterial color="#4ade80" wireframe transparent opacity={0.6} />
+              </mesh>
+            )}
 
-            {/* Step 4: Interactive sliding handles & delete button */}
-            {showOpeningsEditor && (
+            {/* Step 4: Interactive sliding handles & delete button (shown ONLY when selected) */}
+            {showOpeningsEditor && isSelected && (
               <>
                 <Html position={[0, opening.height / 2, 0.05]} center distanceFactor={10}>
                   <div
@@ -5498,6 +5665,12 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
         const STATIC_BASE = apiUrl.replace('/api', '');
 
+        const formatUrl = (url?: string | null) => {
+          if (!url) return undefined;
+          if (url.startsWith('http://') || url.startsWith('https://')) return url;
+          return `${STATIC_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
+        };
+
         // 1. Fetch all unified items to resolve images and GLB URLs
         const itemsRes = await fetch(`${apiUrl}/items?includeHidden=true`);
         if (!itemsRes.ok) throw new Error('Failed to fetch items catalog');
@@ -5546,12 +5719,6 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
 
           const category = (matchedItem.category || '').toLowerCase();
           const name = (matchedItem.name || '').toLowerCase();
-          
-          const formatUrl = (url?: string | null) => {
-            if (!url) return undefined;
-            if (url.startsWith('http://') || url.startsWith('https://')) return url;
-            return `${STATIC_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
-          };
 
           const isTile = category.includes('tile') || category.includes('mosaic') || name.includes('tile') || name.includes('mosaic');
 
@@ -5613,6 +5780,43 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
             });
           }
         });
+
+        // If stored designData exists on package, load exact saved room designs, colors, textures and 3D item positions
+        if (pkgData.designData) {
+          const dd = pkgData.designData;
+          setState({
+            widthFt: dd.widthFt || wFt,
+            depthFt: dd.depthFt || dFt,
+            heightFt: dd.heightFt || hFt,
+            shape: dd.shape || 'rectangular',
+            unit: 'cm',
+            floorColor: dd.floorColor || '#ffffff',
+            floorTextureUrl: formatUrl(dd.floorTextureUrl) || undefined,
+            wallTextureUrl: formatUrl(dd.wallTextureUrl) || undefined,
+            wallDesigns: (dd.wallDesigns || []).map((wd: any) => ({
+              ...wd,
+              textureUrl: formatUrl(wd.textureUrl) || undefined,
+            })),
+            wallOpenings: dd.wallOpenings || [],
+            designType: 'bathroom',
+            subRoomType: undefined,
+          });
+          setWizardWallOpenings(dd.wallOpenings || []);
+          if (dd.placedItems && dd.placedItems.length > 0) {
+            setPlacedItems(
+              dd.placedItems.map((item: any) => ({
+                ...item,
+                model: formatUrl(item.model) || null,
+                image: formatUrl(item.image) || null,
+              }))
+            );
+          } else {
+            setPlacedItems(mappedItems);
+          }
+          setProjectName(pkgData.name || 'Curated Package Layout');
+          setWizardStep(5);
+          return;
+        }
 
         const mappedWallDesigns = Array(8).fill(null).map(() => ({
           splitMode: 'full' as const,
@@ -6337,13 +6541,14 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
     const catalogToUse = catalog;
     const cat = catalogToUse.find(i => i.type === type);
     if (!cat) return;
-    const isWallMounted = type === 'bathtub' ? false : (type === 'shower' ? true : !!cat.isWallMounted);
+    const isWallMounted = checkIsWallMounted(cat);
+    const defaultY = isWallMounted ? getDefaultMountHeight(type, cat.name) : 0;
     setIsPlacingItem({
       id: `${type}_${Date.now()}`,
       type,
       name: cat.name,
       cost: cat.cost,
-      position: [0, isWallMounted ? 1.37 : 0, 0],
+      position: [0, defaultY, 0],
       rotation: 0,
       isWallMounted,
     });
@@ -6360,15 +6565,31 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
   const cancelPlacement = () => setIsPlacingItem(null);
 
   const handleDeleteItem = () => {
-    if (!selectedItemId) return;
-    if (placedItems.some(i => i.id === selectedItemId)) {
-      recordHistory(placedItems.filter(i => i.id !== selectedItemId));
-    } else {
-      setState(prev => ({
-        ...prev,
-        wallOpenings: prev.wallOpenings.filter(op => op.id !== selectedItemId)
-      }));
+    const store = useDesignerStore.getState();
+    const targetId = store.selectedItemId || selectedItemId;
+    if (!targetId) return;
+
+    const targetIdStr = String(targetId);
+    const currentPlaced = store.placedItems.length > 0 ? store.placedItems : placedItems;
+    const currentOpenings = store.state?.wallOpenings || state.wallOpenings || [];
+
+    const isPlaced = currentPlaced.some(i => String(i.id) === targetIdStr);
+    const isOpening = currentOpenings.some(op => String(op.id) === targetIdStr);
+
+    if (isPlaced || !isOpening) {
+      const nextPlaced = currentPlaced.filter(i => String(i.id) !== targetIdStr);
+      recordHistory(nextPlaced);
+      setPlacedItems(nextPlaced);
+      store.setPlacedItems(nextPlaced);
     }
+
+    if (isOpening || !isPlaced) {
+      const nextOpenings = currentOpenings.filter((op: any) => String(op.id) !== targetIdStr);
+      setState((prev: any) => ({ ...prev, wallOpenings: nextOpenings }));
+      store.setState({ wallOpenings: nextOpenings });
+    }
+
+    store.setSelectedItemId(null);
     setSelectedItemId(null);
   };
 
@@ -6387,7 +6608,7 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
 
   if (wizardStep < 5) {
     return (
-      <div className="flex h-screen bg-[#F0EFEB] font-sans overflow-hidden select-none relative">
+      <div className="flex h-full w-full bg-[#F0EFEB] font-sans overflow-hidden select-none relative">
         {/* Left Column: Form/Steps */}
         <div className="w-[380px] bg-white border-r border-gray-100 flex flex-col h-full relative z-25">
           {/* Header */}
@@ -7218,7 +7439,7 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
 
 
   return (
-    <div className="flex h-screen bg-[#F0EFEB] font-sans overflow-hidden select-none relative">
+    <div className="flex h-full w-full bg-[#F0EFEB] font-sans overflow-hidden select-none relative">
 
 
 
@@ -7276,7 +7497,7 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
 
 
       {!readOnly && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/85 backdrop-blur-md border border-gray-200/80 shadow-2xl rounded-full px-5 py-2.5 flex items-center gap-4 z-20">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/85 backdrop-blur-md border border-gray-200/80 shadow-2xl rounded-full px-5 py-2.5 flex items-center gap-4 z-20">
         {/* Dollhouse view */}
         <button
           id="btn-dollhouse"

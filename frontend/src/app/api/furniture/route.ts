@@ -2,6 +2,56 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
+const FRIENDLY_NAMES: Record<string, string> = {
+  // Sofas & Armchairs
+  '2BxFZe1wguy_ygS6NAIVH': 'Modern 3-Seater Fabric Sofa',
+  'YHyJAaauWGv9RC11Btmx2': 'Luxury L-Shape Corner Sofa',
+  'y1aRZRIYb3xcXkWyHKoLU': 'Minimalist Nordic Armchair',
+
+  // Tables & Coffee Tables
+  '4nbsf2qMu9udBE14HxZxu': 'Solid Oak Round Coffee Table',
+  'LRXBXW_xsYDxETpf9dk7g': 'Glass Top Living Coffee Table',
+  '_qAT2rx3eFmhyYAVEqFL0': 'Scandinavian Low Side Table',
+
+  // TV & Media Consoles
+  'hxQ3RhEZYG01DXwo-BwlV': 'Modern Media Console Stand',
+  'tv_lg_oled_8k': 'LG OLED 8K Ultra TV & Stand',
+
+  // Dining Tables & Sets
+  '6iSxtNvbVAhU99-NmL9xW': 'Contemporary 6-Seater Dining Set',
+  'EuI_ddmjQM5-VauSD3tGr': 'Wooden Extendable Dining Table',
+
+  // Beds
+  'Celeste Bed': 'Celeste King Size Upholstered Bed',
+  'Full Cushion Divan Bed': 'Full Cushion Premium Divan Bed',
+  'Teak Cushion Bed': 'Solid Teak Cushion Headboard Bed',
+
+  // Cabinets & Wardrobes
+  'modern_cabinet_hutch_free': 'Modern Cabinet Hutch Storage',
+  'modern_wooden_wardrobe': 'Modern Wooden Double Wardrobe',
+  'wardrobe': 'Classic Standing Bedroom Wardrobe',
+
+  // Dressing Tables & Mirrors
+  'dressing_table': 'Vanity Dressing Table with Mirror',
+  'pbr_dressing_table__low_poly': 'Nordic Vanity Dressing Table',
+  'espejo_cuerpo_entero_-__full_length_mirror': 'Full Length Standing Floor Mirror',
+
+  // Decor & Plants
+  '3d_plant_model__indoor_decorative_plant': 'Indoor Decorative Ceramic Plant',
+  'majesty_palm_plant': 'Majesty Palm Potted Floor Plant',
+};
+
+function formatItemName(rawName: string): string {
+  if (FRIENDLY_NAMES[rawName]) {
+    return FRIENDLY_NAMES[rawName];
+  }
+  return rawName
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, l => l.toUpperCase());
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category');
@@ -34,13 +84,12 @@ export async function GET(request: Request) {
       if (file.startsWith('.')) return;
       
       const ext = path.extname(file);
-      // Handle double extensions like .jpg.avif if needed, but simple parse is usually fine
       const baseName = file.replace(/\.(webp|png|jpg|jpeg|avif|glb|gltf)$/i, '');
       
       if (!itemsMap.has(baseName)) {
         itemsMap.set(baseName, {
           id: `${category}_${baseName}`,
-          name: baseName.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          name: formatItemName(baseName),
           type: category,
           cost: 199.99, // default cost
           isWallMounted: category === 'mirror', // simple heuristic
@@ -68,3 +117,4 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Failed to read directory' }, { status: 500 });
   }
 }
+

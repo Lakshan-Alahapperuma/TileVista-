@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsNotEmpty, IsString, MinLength, MaxLength } from 'class-validator';
 
 export class ResetPasswordDto {
   @IsString()
@@ -7,6 +7,7 @@ export class ResetPasswordDto {
 
   @IsString()
   @IsNotEmpty({ message: 'New password is required' })
-  @MinLength(6, { message: 'Password must be at least 6 characters long' })
+  @MinLength(8, { message: 'Password must be between 8 and 12 characters long' })
+  @MaxLength(12, { message: 'Password must be between 8 and 12 characters long' })
   newPassword: string;
 }
