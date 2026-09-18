@@ -148,6 +148,7 @@ export class ProductsService {
           description: 'Live catalog details temporarily unavailable.',
           price: 0,
           quantity: 0,
+          reorder_level: 0,
         };
         return this.buildUnifiedItem(fallbackOsposItem, dbProduct, true);
       });
@@ -191,6 +192,7 @@ export class ProductsService {
             description: 'Local product record (missing from OSPOS).',
             price: 0,
             quantity: 0,
+            reorder_level: 0,
           };
           result.push(this.buildUnifiedItem(fallbackOsposItem, dbProduct, true));
         }
@@ -318,6 +320,7 @@ export class ProductsService {
           description: 'Live details temporarily unavailable.',
           price: 0,
           quantity: 0,
+          reorder_level: 0,
         };
         const fallbackUnified = this.buildUnifiedItem(fallbackOsposItem, dbProduct, true);
         if (!includeHidden && (!fallbackUnified.hasAssetEntry || !fallbackUnified.isEnabled)) {
