@@ -112,7 +112,7 @@ export const OrderManagement: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const headers = { Authorization: `Bearer ${token || ''}` };
 
       const [summaryRes, listRes] = await Promise.all([
@@ -147,7 +147,7 @@ export const OrderManagement: React.FC = () => {
     setProcessing(true);
     setActionSuccess(null);
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const response = await fetch(`${API_BASE}/orders/admin/${selectedOrder.order_id}/approve`, {
         method: 'POST',
         headers: {
@@ -183,7 +183,7 @@ export const OrderManagement: React.FC = () => {
     setProcessing(true);
     setActionSuccess(null);
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const response = await fetch(`${API_BASE}/orders/admin/${selectedOrder.order_id}/reject`, {
         method: 'POST',
         headers: {

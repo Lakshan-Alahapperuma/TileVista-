@@ -40,7 +40,7 @@ export default function AccountPage() {
     if (!isAuthenticated) return;
     setProfileLoading(true);
     try {
-      const savedToken = token || localStorage.getItem('tilevista_admin_token');
+      const savedToken = token || localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const res = await fetch(`${API_BASE}/users/me`, {
         headers: { Authorization: `Bearer ${savedToken}` },
       });
@@ -70,7 +70,7 @@ export default function AccountPage() {
     setProfileSaving(true);
 
     try {
-      const savedToken = token || localStorage.getItem('tilevista_admin_token');
+      const savedToken = token || localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const res = await fetch(`${API_BASE}/users/me`, {
         method: 'PATCH',
         headers: {
@@ -116,7 +116,7 @@ export default function AccountPage() {
     setPasswordSaving(true);
 
     try {
-      const savedToken = token || localStorage.getItem('tilevista_admin_token');
+      const savedToken = token || localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const res = await fetch(`${API_BASE}/users/me/change-password`, {
         method: 'POST',
         headers: {

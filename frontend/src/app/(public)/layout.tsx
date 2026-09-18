@@ -29,7 +29,7 @@ export default function PublicLayout({
   const fetchNotifications = React.useCallback(async () => {
     if (!isAuthenticated) return;
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       if (!token) return;
 
       const [listRes, countRes] = await Promise.all([
@@ -70,7 +70,7 @@ export default function PublicLayout({
 
   const handleMarkAllRead = async () => {
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       if (!token) return;
       await fetch(`${API_BASE}/notifications/read-all`, {
         method: 'PATCH',
@@ -84,7 +84,7 @@ export default function PublicLayout({
 
   const handleMarkOneRead = async (notificationId: string) => {
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       if (!token) return;
       await fetch(`${API_BASE}/notifications/${notificationId}/read`, {
         method: 'PATCH',

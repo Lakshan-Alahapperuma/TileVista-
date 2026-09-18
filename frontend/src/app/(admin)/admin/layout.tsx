@@ -64,7 +64,7 @@ export default function AdminLayout({
 
   const fetchAdminNotifications = useCallback(async () => {
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       if (!token) return;
 
       const [listRes, countRes] = await Promise.all([
@@ -87,7 +87,7 @@ export default function AdminLayout({
 
   const handleMarkAllRead = async () => {
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       if (!token) return;
       await fetch(`${API_BASE}/notifications/read-all`, {
         method: 'PATCH',
@@ -101,7 +101,7 @@ export default function AdminLayout({
 
   const handleMarkOneRead = async (notificationId: string) => {
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       if (!token) return;
       await fetch(`${API_BASE}/notifications/${notificationId}/read`, {
         method: 'PATCH',
@@ -115,7 +115,7 @@ export default function AdminLayout({
 
   const fetchPendingCount = useCallback(async () => {
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       if (!token) return;
 
       const response = await fetch(`${API_BASE}/admin/products/pending-review`, {

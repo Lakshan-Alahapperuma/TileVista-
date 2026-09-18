@@ -97,7 +97,7 @@ export const ItemAssetCatalogTable: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const [itemsResponse, catsResponse] = await Promise.all([
         fetch(`${API_BASE}/admin/items`, { headers: { 'Authorization': `Bearer ${token || ''}` } }),
         fetch(`${API_BASE}/categories`)
@@ -191,7 +191,7 @@ export const ItemAssetCatalogTable: React.FC = () => {
     setSaving(true);
     setSaveSuccess(null);
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const response = await fetch(`${API_BASE}/admin/items/${editingItem.itemId}/asset`, {
         method: 'PUT',
         headers: {
@@ -241,7 +241,7 @@ export const ItemAssetCatalogTable: React.FC = () => {
     formData.append('file', file);
 
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const response = await fetch(`${API_BASE}/admin/items/${editingItem.itemId}/upload-image`, {
         method: 'POST',
         headers: {
@@ -277,7 +277,7 @@ export const ItemAssetCatalogTable: React.FC = () => {
     formData.append('file', file);
 
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const response = await fetch(`${API_BASE}/admin/items/${editingItem.itemId}/upload-glb`, {
         method: 'POST',
         headers: {

@@ -8,7 +8,9 @@ export interface CreateModelProjectInput {
 }
 
 function getAuthHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('tilevista_admin_token') : null;
+  const token = typeof window !== 'undefined'
+    ? localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token')
+    : null;
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 

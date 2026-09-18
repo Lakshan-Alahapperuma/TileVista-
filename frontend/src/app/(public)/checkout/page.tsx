@@ -66,7 +66,7 @@ export default function CheckoutPage() {
     setErrorMessage(null);
 
     try {
-      const savedToken = token || localStorage.getItem('tilevista_admin_token');
+      const savedToken = token || localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       if (!savedToken) {
         throw new Error('Authentication session expired. Please log in again.');
       }

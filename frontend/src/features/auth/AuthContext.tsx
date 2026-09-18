@@ -10,19 +10,38 @@ export interface UserSession {
   lastName?: string;
 }
 
+export const getStoredToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
+};
+
+export const getStoredUser = (): UserSession | null => {
+  if (typeof window === 'undefined') return null;
+  const savedUser = localStorage.getItem('tilevista_admin_user') || sessionStorage.getItem('tilevista_admin_user');
+  if (!savedUser) return null;
+  try {
+    return JSON.parse(savedUser);
+  } catch {
+    return null;
+  }
+};
+
 interface AuthContextType {
   user: UserSession | null;
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, pass: string) => Promise<boolean>;
-  register: (dto: {
-    email: string;
-    pass: string;
-    firstName?: string;
-    lastName?: string;
-    phone?: string;
-  }) => Promise<boolean>;
+  login: (email: string, pass: string, rememberMe?: boolean) => Promise<boolean>;
+  register: (
+    dto: {
+      email: string;
+      pass: string;
+      firstName?: string;
+      lastName?: string;
+      phone?: string;
+    },
+    rememberMe?: boolean
+  ) => Promise<boolean>;
   logout: () => void;
 }
 
@@ -34,17 +53,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check local storage for persistent admin session on mount
-    const savedToken = localStorage.getItem('tilevista_admin_token');
-    const savedUser = localStorage.getItem('tilevista_admin_user');
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
+    // Check both local storage and session storage on mount
+    const savedToken = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
+    const savedUserStr = localStorage.getItem('tilevista_admin_user') || sessionStorage.getItem('tilevista_admin_user');
+    if (savedToken && savedUserStr) {
+      try {
+        const savedUser = JSON.parse(savedUserStr);
+        setToken(savedToken);
+        setUser(savedUser);
+      } catch (err) {
+        console.error('Failed to parse stored user:', err);
+      }
     }
     setIsLoading(false);
   }, []);
 
-  const login = async (email: string, pass: string): Promise<boolean> => {
+  const login = async (email: string, pass: string, rememberMe = false): Promise<boolean> => {
     setIsLoading(true);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
@@ -72,8 +96,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastName: data.user.lastName,
       };
 
-      localStorage.setItem('tilevista_admin_token', data.access_token);
-      localStorage.setItem('tilevista_admin_user', JSON.stringify(userSession));
+      const storage = rememberMe ? localStorage : sessionStorage;
+      const otherStorage = rememberMe ? sessionStorage : localStorage;
+
+      storage.setItem('tilevista_admin_token', data.access_token);
+      storage.setItem('tilevista_admin_user', JSON.stringify(userSession));
+      otherStorage.removeItem('tilevista_admin_token');
+      otherStorage.removeItem('tilevista_admin_user');
 
       setToken(data.access_token);
       setUser(userSession);
@@ -86,13 +115,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (dto: {
-    email: string;
-    pass: string;
-    firstName?: string;
-    lastName?: string;
-    phone?: string;
-  }): Promise<boolean> => {
+  const register = async (
+    dto: {
+      email: string;
+      pass: string;
+      firstName?: string;
+      lastName?: string;
+      phone?: string;
+    },
+    rememberMe = false
+  ): Promise<boolean> => {
     setIsLoading(true);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
@@ -125,8 +157,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastName: data.user.lastName,
       };
 
-      localStorage.setItem('tilevista_admin_token', data.access_token);
-      localStorage.setItem('tilevista_admin_user', JSON.stringify(userSession));
+      const storage = rememberMe ? localStorage : sessionStorage;
+      const otherStorage = rememberMe ? sessionStorage : localStorage;
+
+      storage.setItem('tilevista_admin_token', data.access_token);
+      storage.setItem('tilevista_admin_user', JSON.stringify(userSession));
+      otherStorage.removeItem('tilevista_admin_token');
+      otherStorage.removeItem('tilevista_admin_user');
 
       setToken(data.access_token);
       setUser(userSession);
@@ -143,6 +180,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     localStorage.removeItem('tilevista_admin_token');
     localStorage.removeItem('tilevista_admin_user');
+    sessionStorage.removeItem('tilevista_admin_token');
+    sessionStorage.removeItem('tilevista_admin_user');
     setToken(null);
     setUser(null);
   };

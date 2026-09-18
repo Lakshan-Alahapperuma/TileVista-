@@ -3,7 +3,9 @@ import { AnalyticsKpi, SalesTrendPoint, ProductPerformance, ProductVelocity, Dec
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 function getAuthHeaders() {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('tilevista_admin_token') : null;
+  const token = typeof window !== 'undefined'
+    ? localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token')
+    : null;
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

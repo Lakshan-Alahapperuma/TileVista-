@@ -6,7 +6,7 @@ import { useAuth } from './AuthContext';
 import { UserPlus, LogIn, ShieldAlert, KeyRound, CheckCircle2, ArrowLeft } from 'lucide-react';
 
 export const AuthFeature: React.FC = () => {
-  const { login, register } = useAuth();
+  const { login, register, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectParam = searchParams.get('redirect');
@@ -18,13 +18,14 @@ export const AuthFeature: React.FC = () => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handlePostAuthRedirect = () => {
+  const handlePostAuthRedirect = React.useCallback(() => {
     let role = '';
-    const savedUser = localStorage.getItem('tilevista_admin_user');
+    const savedUser = localStorage.getItem('tilevista_admin_user') || sessionStorage.getItem('tilevista_admin_user');
     if (savedUser) {
       try {
         const userObj = JSON.parse(savedUser);
@@ -54,7 +55,13 @@ export const AuthFeature: React.FC = () => {
 
     // CUSTOMER default destination: /dashboard
     router.push('/dashboard');
-  };
+  }, [redirectParam, router]);
+
+  React.useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      handlePostAuthRedirect();
+    }
+  }, [isAuthenticated, isLoading, handlePostAuthRedirect]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,13 +95,16 @@ export const AuthFeature: React.FC = () => {
         }
 
         // Customer Registration
-        const success = await register({
-          email,
-          pass: password,
-          firstName: firstName || undefined,
-          lastName: lastName || undefined,
-          phone: phone || undefined,
-        });
+        const success = await register(
+          {
+            email,
+            pass: password,
+            firstName: firstName || undefined,
+            lastName: lastName || undefined,
+            phone: phone || undefined,
+          },
+          rememberMe
+        );
 
         if (success) {
           handlePostAuthRedirect();
@@ -103,7 +113,7 @@ export const AuthFeature: React.FC = () => {
         }
       } else {
         // Login
-        const success = await login(email, password);
+        const success = await login(email, password, rememberMe);
         if (success) {
           handlePostAuthRedirect();
         } else {
@@ -242,6 +252,18 @@ export const AuthFeature: React.FC = () => {
                 {isRegister && (
                   <p className="text-[10px] text-gray-400 font-light">Password must be between 8 and 12 characters long.</p>
                 )}
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="rememberMe"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-3.5 h-3.5 border-gray-300 accent-[#1A1A1A] cursor-pointer"
+                  />
+                  <label htmlFor="rememberMe" className="text-[11px] text-gray-600 font-light cursor-pointer select-none">
+                    Remember me on this browser
+                  </label>
+                </div>
               </div>
             )}
 

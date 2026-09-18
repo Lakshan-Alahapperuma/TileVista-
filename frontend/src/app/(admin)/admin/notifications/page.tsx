@@ -28,7 +28,7 @@ export default function AdminNotificationsPage() {
     setLoading(true);
     setError(null);
     try {
-      const savedToken = token || localStorage.getItem('tilevista_admin_token');
+      const savedToken = token || localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const res = await fetch(`${API_BASE}/notifications`, {
         headers: { Authorization: `Bearer ${savedToken || ''}` },
       });
@@ -50,7 +50,7 @@ export default function AdminNotificationsPage() {
 
   const handleMarkAllRead = async () => {
     try {
-      const savedToken = token || localStorage.getItem('tilevista_admin_token');
+      const savedToken = token || localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       await fetch(`${API_BASE}/notifications/read-all`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${savedToken || ''}` },
@@ -63,7 +63,7 @@ export default function AdminNotificationsPage() {
 
   const handleMarkOneRead = async (id: string) => {
     try {
-      const savedToken = token || localStorage.getItem('tilevista_admin_token');
+      const savedToken = token || localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       await fetch(`${API_BASE}/notifications/${id}/read`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${savedToken || ''}` },

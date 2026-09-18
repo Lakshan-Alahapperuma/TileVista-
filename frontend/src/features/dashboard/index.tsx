@@ -121,7 +121,7 @@ export const CustomerDashboard: React.FC = () => {
     setError(null);
 
     try {
-      const savedToken = token || localStorage.getItem('tilevista_admin_token');
+      const savedToken = token || localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const headers = { Authorization: `Bearer ${savedToken || ''}` };
 
       const [summaryRes, listRes] = await Promise.all([

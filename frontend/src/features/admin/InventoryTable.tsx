@@ -40,7 +40,7 @@ export const InventoryTable: React.FC = () => {
     }
     setError(null);
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const response = await fetch(`${API_BASE}/inventory`, {
         headers: {
           'Authorization': `Bearer ${token || ''}`,

@@ -11,7 +11,7 @@ export default function InquiriesAdminPage() {
 
   const fetchInquiries = async () => {
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
       const res = await fetch(`${apiUrl}/inquiries`, {
         headers: { 'Authorization': `Bearer ${token}` },
@@ -33,7 +33,7 @@ export default function InquiriesAdminPage() {
 
   const handleMarkReplied = async (id: string) => {
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
       const res = await fetch(`${apiUrl}/inquiries/${id}/status`, {
         method: 'PATCH',
