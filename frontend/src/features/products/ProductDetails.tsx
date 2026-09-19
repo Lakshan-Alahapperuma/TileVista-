@@ -8,6 +8,7 @@ import { useProduct } from './hooks/useProduct';
 import { formatLKR, getBrand, getFallbackImage, getProductSlug } from './utils';
 import { STATIC_BASE } from './constants';
 import { useCart } from '../cart/hooks/useCart';
+import { useDesignerStore } from '../../store/designer.store';
 import { ProductCard } from './components/ProductCard';
 
 interface ProductDetailsProps {
@@ -86,7 +87,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ id, slug }) => {
       setAddedToCart(true);
       setTimeout(() => setAddedToCart(false), 2000);
     } else {
-      alert(res.error || 'Failed to add item to cart');
+      useDesignerStore.getState().showAlert(res.error || 'Failed to add item to cart');
     }
   };
 

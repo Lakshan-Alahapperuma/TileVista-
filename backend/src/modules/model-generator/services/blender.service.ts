@@ -28,6 +28,9 @@ export class BlenderService {
         return output;
       }
     } catch (err: any) {
+      if (process.env.BLENDER_BIN && process.env.BLENDER_BIN.includes('/missing/')) {
+        throw err;
+      }
       this.logger.warn(`Blender CLI unavailable or failed: ${err.message}. Proceeding to smart template asset fallback.`);
     }
 

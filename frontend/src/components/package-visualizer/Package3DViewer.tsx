@@ -71,14 +71,7 @@ export const Package3DViewer: React.FC<Package3DViewerProps> = ({ readOnly = fal
       const name = (pi.name || '').toLowerCase();
       const isTile = category.includes('tile') || category.includes('mosaic') || name.includes('tile') || name.includes('mosaic');
 
-      if (isTile) {
-        const isFloor = [4, 6, 17, 18, 20].includes(pi.osposItemId) || name.includes('floor') || category.includes('floor');
-        if (isFloor) {
-          floorTexUrl = formatUrl(pi.imageUrl);
-        } else {
-          wallTexUrl = formatUrl(pi.imageUrl);
-        }
-      } else {
+      if (!isTile) {
         let type = 'sink';
         let position: [number, number, number] = [0, 0, 0];
         let rotation = 0;

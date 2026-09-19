@@ -1,29 +1,67 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Package } from '../../types/package';
-import { Sparkles, ShoppingBag, Percent } from 'lucide-react';
+import { Sparkles, ShoppingBag, Percent, Loader2 } from 'lucide-react';
+import { useCart } from '../../features/cart/hooks/useCart';
+import { useDesignerStore } from '../../store/designer.store';
 
 interface PackageDetailsProps {
   pkg: Package;
 }
 
 export const PackageDetails: React.FC<PackageDetailsProps> = ({ pkg }) => {
+  const { addItem } = useCart();
+  const [isAdding, setIsAdding] = useState(false);
+
   const formatLKR = (num: number) => {
     return `LKR ${Math.round(num).toLocaleString('en-LK')}`;
   };
 
-  const handleAddPackageToCart = () => {
-    alert(`Successfully added curated package bundle "${pkg.name}" to your shopping cart!`);
+  const handleAddPackageToCart = async () => {
+    if (isAdding) return;
+    setIsAdding(true);
+    try {
+      if (pkg.items && pkg.items.length > 0) {
+        let addedCount = 0;
+        for (const item of pkg.items) {
+          const itemId = item.osposItemId || (item as any).itemId || (item as any).id;
+          if (itemId) {
+            await addItem(Number(itemId), item.quantity || 1);
+            addedCount++;
+          }
+        }
+        if (addedCount > 0) {
+          useDesignerStore.getState().showAlert(`Successfully added all items from "${pkg.name}" to your shopping cart!`);
+        } else {
+          useDesignerStore.getState().showAlert(`No valid items found in package "${pkg.name}".`);
+        }
+      } else {
+        useDesignerStore.getState().showAlert(`No items in package "${pkg.name}".`);
+      }
+    } catch (err: any) {
+      useDesignerStore.getState().showAlert(`Failed to add package items to cart: ${err.message || 'Error occurred'}`);
+    } finally {
+      setIsAdding(false);
+    }
   };
 
-  let origPrice = pkg.originalPrice || 0;
-  if (origPrice === 0) {
-    if (pkg.items && pkg.items.length > 0) {
-      origPrice = pkg.items.reduce((sum: number, i: any) => sum + (Number(i.price || 0) * (i.quantity || 1)), 0);
-    } else if (pkg.designData && Array.isArray(pkg.designData.placedItems)) {
-      origPrice = pkg.designData.placedItems.reduce((sum: number, i: any) => sum + Number(i.cost || i.price || 150), 0);
-    }
+  const isTileItem = (item: any) => {
+    const cat = (item.category || '').toLowerCase();
+    const name = (item.name || '').toLowerCase();
+    const type = (item.type || '').toLowerCase();
+    return cat.includes('tile') || cat.includes('mosaic') || name.includes('tile') || type.includes('tile');
+  };
+
+  const nonTileItems = (pkg.items || []).filter(item => !isTileItem(item));
+
+  let origPrice = 0;
+  if (nonTileItems.length > 0) {
+    origPrice = nonTileItems.reduce((sum: number, i: any) => sum + (Number(i.price || 0) * (i.quantity || 1)), 0);
+  } else if (pkg.originalPrice && pkg.originalPrice > 0) {
+    origPrice = pkg.originalPrice;
+  } else if (pkg.designData && Array.isArray(pkg.designData.placedItems)) {
+    origPrice = pkg.designData.placedItems.reduce((sum: number, i: any) => sum + Number(i.cost || i.price || 150), 0);
   }
 
   const discountPercent = pkg.discountPercent || 0;
@@ -92,10 +130,11 @@ export const PackageDetails: React.FC<PackageDetailsProps> = ({ pkg }) => {
       {/* Action CTA */}
       <button 
         onClick={handleAddPackageToCart}
-        className="w-full bg-[#1A1A1A] hover:bg-[#D4C5B9] hover:text-[#1A1A1A] text-white font-bold text-xs tracking-widest uppercase py-4 transition-all duration-300 flex items-center justify-center gap-2 rounded-md shadow-sm"
+        disabled={isAdding}
+        className="w-full bg-[#1A1A1A] hover:bg-[#D4C5B9] hover:text-[#1A1A1A] disabled:bg-gray-400 text-white font-bold text-xs tracking-widest uppercase py-4 transition-all duration-300 flex items-center justify-center gap-2 rounded-md shadow-sm active:scale-98"
       >
-        <ShoppingBag size={14} />
-        <span>Add Curated Suite to Cart</span>
+        {isAdding ? <Loader2 size={14} className="animate-spin" /> : <ShoppingBag size={14} />}
+        <span>{isAdding ? 'Adding to Cart...' : 'Add to Cart'}</span>
       </button>
     </div>
   );

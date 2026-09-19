@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import React from 'react';
-import { X, RotateCw, Trash2, ArrowLeft, Maximize2 } from 'lucide-react';
+import { X, RotateCw, Trash2, ArrowLeft, Maximize2, Search } from 'lucide-react';
 import { useDesignerStore } from '../../store/designer.store';
 import { DOOR_STYLES, WINDOW_STYLES, renderDoorIcon, ItemSidebarPreview, checkIsWallMounted, getDefaultMountHeight } from './SharedDesignerEngine';
 import { getActiveCategories, getActiveCatalog } from './catalog';
 import { remoteLog } from './SharedDesignerEngine';
+import { getBrand } from '../../features/products/utils';
 
 export default function ProductPanel({ readOnly = false }: { readOnly?: boolean }) {
   if (readOnly) return null;
@@ -21,10 +22,12 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
   const [coverageHeightInput, setCoverageHeightInput] = useState<string>('');
   const [selectedProductDetails, setSelectedProductDetails] = useState<any | null>(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>('All');
+  const [brandSearchQuery, setBrandSearchQuery] = useState<string>('');
 
   useEffect(() => {
     setSelectedProductDetails(null);
     setSelectedSubcategory('All');
+    setBrandSearchQuery('');
   }, [activeCategory]);
 
   const isFloorTile = (item: any) => {
@@ -41,6 +44,9 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
         fetch(`${apiUrl}/items`)
           .then(res => res.json())
           .then(data => {
+            if (Array.isArray(data)) {
+              useDesignerStore.getState().setCatalogItems(data);
+            }
             console.log("OSPOS_TILES raw items fetched:", data);
             // Filter strictly to floor tiles (categoryId = 1, subcategoryId = 1)
             const tiles = data.filter((d: any) => isFloorTile(d));
@@ -58,6 +64,9 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
         fetch(`${apiUrl}/items`)
           .then(res => res.json())
           .then(data => {
+            if (Array.isArray(data)) {
+              useDesignerStore.getState().setCatalogItems(data);
+            }
             if (activeCategory === 'wall_tiles') {
               setDynamicItems(data.filter((d: any) => {
                 const catId = d.categoryId !== null && d.categoryId !== undefined ? Number(d.categoryId) : null;
@@ -110,7 +119,14 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
 
   const confirmPlacement = () => {
     if (!isPlacingItem) return;
-    recordHistory([...placedItems, isPlacingItem]);
+    const store = useDesignerStore.getState();
+    const currentList = store.placedItems;
+    const exists = currentList.some((i: any) => String(i.id) === String(isPlacingItem.id));
+    if (!exists) {
+      const next = [...currentList, isPlacingItem];
+      store.setPlacedItems(next);
+      store.recordHistory(next);
+    }
     setSelectedItemId(isPlacingItem.id);
     setIsPlacingItem(null);
   };
@@ -124,22 +140,15 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
 
     const targetIdStr = String(targetId);
     const currentPlaced = store.placedItems.length > 0 ? store.placedItems : placedItems;
+    const nextPlaced = currentPlaced.filter(i => String(i.id) !== targetIdStr);
+    
+    store.recordHistory(nextPlaced);
+    store.setPlacedItems(nextPlaced);
+
     const currentOpenings = store.state?.wallOpenings || state.wallOpenings || [];
-
-    const isPlaced = currentPlaced.some(i => String(i.id) === targetIdStr);
-    const isOpening = currentOpenings.some(op => String(op.id) === targetIdStr);
-
-    if (isPlaced || !isOpening) {
-      const nextPlaced = currentPlaced.filter(i => String(i.id) !== targetIdStr);
-      store.recordHistory(nextPlaced);
-      store.setPlacedItems(nextPlaced);
-    }
-
-    if (isOpening || !isPlaced) {
-      const nextOpenings = currentOpenings.filter((op: any) => String(op.id) !== targetIdStr);
-      setState((prev: any) => ({ ...prev, wallOpenings: nextOpenings }));
-      store.setState({ wallOpenings: nextOpenings });
-    }
+    const nextOpenings = currentOpenings.filter((op: any) => String(op.id) !== targetIdStr);
+    setState((prev: any) => ({ ...prev, wallOpenings: nextOpenings }));
+    store.setState({ wallOpenings: nextOpenings });
 
     store.setSelectedItemId(null);
     setSelectedItemId(null);
@@ -180,8 +189,8 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
     const itemType = cat.type || type;
     const defaultY = isWallMounted ? getDefaultMountHeight(itemType, cat.name) : 0;
 
-    setIsPlacingItem({
-      id: `${itemType}_${Date.now()}`,
+    const newItem: any = {
+      id: `${itemType}_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
       type: itemType,
       name: cat.name,
       cost: cat.cost || cat.price || 0,
@@ -189,8 +198,19 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
       rotation: 0,
       isWallMounted: isWallMounted,
       color: selectedItemColor || '#FFFFFF',
-      model: fullModelUrl
-    });
+      model: fullModelUrl,
+      scale: cat.scale ? { x: Number(cat.scale.x || 1), y: Number(cat.scale.y || 1), z: Number(cat.scale.z || 1) } : undefined
+    };
+
+    const store = useDesignerStore.getState();
+    const currentPlaced = store.placedItems.length > 0 ? store.placedItems : placedItems;
+    const nextPlaced = [...currentPlaced, newItem];
+
+    store.setPlacedItems(nextPlaced);
+    store.recordHistory(nextPlaced);
+    store.setSelectedItemId(newItem.id);
+    setSelectedItemId(newItem.id);
+    setIsPlacingItem(null);
 
     if (activeCategory !== 'bathware_products') {
       setActiveCategory(null);
@@ -286,7 +306,7 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
                       <div className="flex items-baseline justify-between border-t border-gray-50 pt-2 mt-1">
                         <span className="text-[10px] text-gray-400 uppercase">Bundle Price</span>
                         <span className="font-bold text-xs text-gray-800">
-                          Rs {Math.round(pkg.calculatedPrice).toLocaleString()}
+                          LKR {Math.round(pkg.calculatedPrice).toLocaleString()}
                         </span>
                       </div>
                       <button
@@ -411,7 +431,7 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
                             showAlert(`Curated package "${pkg.name}" applied successfully!`);
                             setActiveCategory(null);
                           } catch (err: any) {
-                            alert(`Failed to load package: ${err.message}`);
+                            showAlert(`Failed to load package: ${err.message}`);
                           }
                         }}
                         className="w-full bg-[#1A1A1A] hover:bg-black text-white text-[9px] font-bold tracking-wider uppercase py-2 transition-all rounded mt-1.5"
@@ -451,6 +471,26 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
               </div>
             ) : ['ospos_tiles', 'wall_tiles', 'floor_tiles'].includes(activeCategory) ? (
               <div className="space-y-2 pt-1 pb-4">
+                {/* Brand & Tile Search Filter */}
+                <div className="relative flex items-center mb-2">
+                  <Search size={14} className="absolute left-3 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={brandSearchQuery}
+                    onChange={(e) => setBrandSearchQuery(e.target.value)}
+                    placeholder="Search tile or brand (e.g. Rocell)..."
+                    className="w-full pl-9 pr-8 py-2 bg-gray-50 hover:bg-gray-100/80 focus:bg-white border border-gray-200 focus:border-black rounded-xl text-xs font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black/10 transition-all"
+                  />
+                  {brandSearchQuery && (
+                    <button
+                      onClick={() => setBrandSearchQuery('')}
+                      className="absolute right-2.5 p-1 text-gray-400 hover:text-black rounded-full hover:bg-gray-200 transition-all"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+
                 {activeCategory === 'wall_tiles' && (
                   <div className="mb-2 bg-gray-50 p-2.5 rounded-xl border border-gray-100 flex items-center justify-between">
                     <span className="text-[10px] font-bold text-gray-600 tracking-wider">TILE HEIGHT (M)</span>
@@ -488,107 +528,127 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
                 {isLoadingItems ? (
                   <div className="text-sm text-gray-500 py-8 text-center animate-pulse font-medium">Loading items from OSPOS...</div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-6">
-                    {dynamicItems.map((item, idx) => {
-                      const STATIC_BASE = process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api', '') : 'http://localhost:4000';
+                  (() => {
+                    const filteredTiles = dynamicItems.filter(item => {
+                      if (!brandSearchQuery.trim()) return true;
+                      const query = brandSearchQuery.trim().toLowerCase();
+                      const brand = getBrand(item).toLowerCase();
+                      const rawBrand = (item.brand || '').toLowerCase();
+                      const name = (item.name || '').toLowerCase();
+                      const sku = (item.sku || '').toLowerCase();
+                      const category = (item.category || '').toLowerCase();
+                      const material = (item.material || '').toLowerCase();
+                      return brand.includes(query) || rawBrand.includes(query) || name.includes(query) || sku.includes(query) || category.includes(query) || material.includes(query);
+                    });
 
-                      // Format price
-                      const priceWhole = Math.floor(item.price || 0);
-                      const priceDecimal = ((item.price || 0) % 1).toFixed(2).substring(1);
-
-
-
-
-
-
-                      /* apply wall tiles and notification*/
-
-
-
-
+                    if (filteredTiles.length === 0) {
                       return (
-                        <button
-                          key={idx}
-                          onClick={() => {
-                            if (item.imageUrl) {
-                              if (activeCategory === 'wall_tiles') {
-                                const texUrl = `${STATIC_BASE}${item.imageUrl}`;
-                                const hVal = coverageHeightInput ? parseFloat(coverageHeightInput) : null;
-                                remoteLog("TILE CLICKED. selectedWallIdx:", selectedWallIdx);
-                                if (state.designType === 'bathroom') {
-                                  if (selectedWallIdx !== null) {
-                                    setState((prev: any) => {
-                                      const next = [...prev.wallDesigns];
-                                      if (!next[selectedWallIdx]) next[selectedWallIdx] = { wallIndex: selectedWallIdx };
-                                      next[selectedWallIdx] = {
-                                        ...next[selectedWallIdx],
-                                        textureUrl: texUrl,
-                                        textureCoverageHeight: hVal,
-                                        tileAssetId: item.itemId.toString()
-                                      };
-                                      return { ...prev, wallDesigns: next };
-                                    });
-                                    setSelectedWallIdx(null);
-                                  } else {
-                                    showAlert("Please select a wall in the 3D view first to apply this tile.");
-                                  }
-                                } else {
-                                  setState((prev: any) => ({
-                                    ...prev,
-                                    wallTextureUrl: texUrl
-                                  }));
-                                }
-                              } else {
-                                setState((prev: any) => ({
-                                  ...prev,
-                                  floorTextureUrl: `${STATIC_BASE}${item.imageUrl}`
-                                }));
-                              }
-                            }
-                          }}
-                          className="text-left bg-white transition-all overflow-hidden flex flex-col group relative border border-transparent hover:border-gray-200 p-1.5 -m-1.5 rounded-xl"
-                        >
-                          <div className="w-full aspect-square bg-[#f5f5f5] flex items-center justify-center overflow-hidden mb-3 rounded-lg">
-                            {item.imageUrl ? (
-                              <img src={`${STATIC_BASE}${item.imageUrl}`} alt={item.name} className="w-full h-full object-cover mix-blend-multiply group-hover:scale-105 transition-transform duration-500" />
-                            ) : (
-                              <div className="text-gray-400 text-xs text-center p-2 font-medium">No Image</div>
-                            )}
-                          </div>
-                          <div className="flex flex-col gap-1 px-1">
-                            {/* Brand / Short Name (assuming first word is brand/style) */}
-                            <span className="text-xs font-extrabold text-[#111111] uppercase tracking-wide">{item.name.split(' ')[0]}</span>
-                            {/* Full Description */}
-                            <span className="text-[11px] text-gray-600 leading-snug min-h-[34px]">{item.name}</span>
-
-                            {/* Price formatted */}
-                            <div className="mt-1.5 flex items-start">
-                              <span className="text-xs font-bold text-black mt-0.5 mr-0.5">Rs</span>
-                              <span className="text-xl font-extrabold text-black leading-none">{priceWhole}</span>
-                              <span className="text-[10px] font-bold text-black mt-0.5">{priceDecimal}</span>
-                            </div>
-
-                            {/* Availability */}
-                            {item.quantity !== undefined && (
-                              <div className="mt-2.5 flex items-center gap-1.5">
-                                <div className={`w-2 h-2 rounded-full ${item.quantity > 0 ? 'bg-green-500' : 'bg-red-500'}`} />
-                                <span className={`text-[10px] font-bold ${item.quantity > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                                  {item.quantity > 0 ? `In Stock: ${item.quantity}` : 'Out of stock'}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </button>
+                        <div className="text-center py-8 text-xs text-gray-400 font-medium">
+                          No matching tiles found for "{brandSearchQuery}"
+                        </div>
                       );
-                    })}
-                  </div>
+                    }
+
+                    return (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-6">
+                        {filteredTiles.map((item, idx) => {
+                          const STATIC_BASE = process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api', '') : 'http://localhost:4000';
+
+                          // Format price
+                          const priceWhole = Math.floor(item.price || 0);
+                          const priceDecimal = ((item.price || 0) % 1).toFixed(2).substring(1);
+
+                          return (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                if (item.imageUrl) {
+                                  const texUrl = `${STATIC_BASE}${item.imageUrl}`;
+                                  const tileItemInfo = {
+                                    itemId: item.itemId,
+                                    name: item.name,
+                                    imageUrl: texUrl,
+                                    price: Number(item.price || 0),
+                                    dimensions: item.dimensions || null,
+                                    size: item.size || null,
+                                  };
+                                  if (activeCategory === 'wall_tiles') {
+                                    const hVal = coverageHeightInput ? parseFloat(coverageHeightInput) : null;
+                                    remoteLog("TILE CLICKED. selectedWallIdx:", selectedWallIdx);
+                                    if (state.designType === 'bathroom') {
+                                      if (selectedWallIdx !== null) {
+                                        setState((prev: any) => {
+                                          const next = [...prev.wallDesigns];
+                                          if (!next[selectedWallIdx]) next[selectedWallIdx] = { wallIndex: selectedWallIdx };
+                                          next[selectedWallIdx] = {
+                                            ...next[selectedWallIdx],
+                                            textureUrl: texUrl,
+                                            textureCoverageHeight: hVal,
+                                            tileAssetId: item.itemId.toString(),
+                                            tileItem: tileItemInfo,
+                                          };
+                                          return { ...prev, wallDesigns: next };
+                                        });
+                                        setSelectedWallIdx(null);
+                                      } else {
+                                        showAlert("Please select a wall in the 3D view first to apply this tile.");
+                                      }
+                                    } else {
+                                      setState((prev: any) => ({
+                                        ...prev,
+                                        wallTextureUrl: texUrl,
+                                        wallTileItem: tileItemInfo,
+                                      }));
+                                    }
+                                  } else {
+                                    setState((prev: any) => ({
+                                      ...prev,
+                                      floorTextureUrl: texUrl,
+                                      floorTileItem: tileItemInfo,
+                                    }));
+                                  }
+                                }
+                              }}
+                              className="text-left bg-white transition-all overflow-hidden flex flex-col group relative border border-transparent hover:border-gray-200 p-1.5 -m-1.5 rounded-xl"
+                            >
+                              <div className="w-full aspect-square bg-[#f5f5f5] flex items-center justify-center overflow-hidden mb-3 rounded-lg">
+                                {item.imageUrl ? (
+                                  <img src={`${STATIC_BASE}${item.imageUrl}`} alt={item.name} className="w-full h-full object-cover mix-blend-multiply group-hover:scale-105 transition-transform duration-500" />
+                                ) : (
+                                  <div className="text-gray-400 text-xs text-center p-2 font-medium">No Image</div>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-1 px-1">
+                                {/* Brand / Short Name */}
+                                <span className="text-xs font-extrabold text-[#111111] uppercase tracking-wide">{getBrand(item)}</span>
+                                {/* Full Description */}
+                                <span className="text-[11px] text-gray-600 leading-snug min-h-[34px]">{item.name}</span>
+
+                                {/* Price formatted */}
+                                <div className="mt-1.5 flex items-start">
+                                  <span className="text-xs font-bold text-black mt-0.5 mr-0.5">LKR</span>
+                                  <span className="text-xl font-extrabold text-black leading-none">{priceWhole}</span>
+                                  <span className="text-[10px] font-bold text-black mt-0.5">{priceDecimal}</span>
+                                </div>
+
+                                {/* Availability */}
+                                {item.quantity !== undefined && (
+                                  <div className="mt-2.5 flex items-center gap-1.5">
+                                    <div className={`w-2 h-2 rounded-full ${item.quantity > 0 ? 'bg-green-500' : 'bg-red-500'}`} />
+                                    <span className={`text-[10px] font-bold ${item.quantity > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                      {item.quantity > 0 ? `In Stock: ${item.quantity}` : 'Out of stock'}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()
                 )}
               </div>
-
-
-
-              /* render openings*/
-
             ) : activeCategory === 'openings' ? (
               <div className="space-y-4">
                 <div className="space-y-1.5">
@@ -665,7 +725,7 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
                     <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
                       {item.isWallMounted ? 'Wall Snap' : 'Floor Placement'}
                     </span>
-                    <span className="text-xs font-mono font-bold text-[#1A1A1A]">Rs {item.cost?.toFixed(2)}</span>
+                    <span className="text-xs font-mono font-bold text-[#1A1A1A]">LKR {item.cost?.toFixed(2)}</span>
                   </div>
                 </button>
               ))
@@ -686,8 +746,8 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
       {activeCategory === 'bathware_products' && (
         <div className="fixed right-0 top-0 bottom-0 h-screen w-full sm:w-[420px] max-w-full bg-white border-l border-gray-200 shadow-2xl z-40 flex flex-col font-sans transition-all duration-300">
           {selectedProductDetails ? (
-            /* DETAILED VIEW (showing product info with action controls) */
             <div className="flex-1 flex flex-col h-full bg-white">
+              {/* DETAILED VIEW (showing product info with action controls) */}
               {/* Header */}
               <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-100">
                 <button
@@ -730,7 +790,7 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
                     <div>
                       <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Showroom Price</span>
                       <div className="flex items-baseline mt-0.5">
-                        <span className="text-xs font-bold text-gray-900 mr-0.5">Rs</span>
+                        <span className="text-xs font-bold text-gray-900 mr-0.5">LKR</span>
                         <span className="text-2xl font-black text-gray-900 leading-none">
                           {Math.floor(selectedProductDetails.price || 0).toLocaleString()}
                         </span>
@@ -817,13 +877,8 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
 
 
           ) : (
-            /* PRODUCTS CATALOG GRID (category list layout) */
-
-
-
-
-
             <div className="flex-1 flex flex-col h-full bg-white">
+              {/* PRODUCTS CATALOG GRID (category list layout) */}
               {/* Header */}
               <div className="px-6 pt-6 pb-4 border-b border-gray-100 flex items-center justify-between">
                 <div>
@@ -854,6 +909,28 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
                 ))}
               </div>
 
+              {/* Brand & Product Name Search Bar */}
+              <div className="px-6 py-3 border-b border-gray-100 bg-white">
+                <div className="relative flex items-center">
+                  <Search size={14} className="absolute left-3 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={brandSearchQuery}
+                    onChange={(e) => setBrandSearchQuery(e.target.value)}
+                    placeholder="Search product or brand name (e.g. Rocell)..."
+                    className="w-full pl-9 pr-8 py-2 bg-gray-50 hover:bg-gray-100/80 focus:bg-white border border-gray-200 focus:border-black rounded-xl text-xs font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black/10 transition-all"
+                  />
+                  {brandSearchQuery && (
+                    <button
+                      onClick={() => setBrandSearchQuery('')}
+                      className="absolute right-2.5 p-1 text-gray-400 hover:text-black rounded-full hover:bg-gray-200 transition-all"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Grid List */}
               <div className="flex-1 overflow-y-auto p-6">
                 {isLoadingItems ? (
@@ -862,61 +939,89 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
                     <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest animate-pulse">Loading items...</span>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-6">
-                    {dynamicItems
-                      .filter(item => selectedSubcategory === 'All' || item.category === selectedSubcategory)
-                      .map((item, idx) => {
-                        const STATIC_BASE = process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api', '') : 'http://localhost:4000';
-                        const priceWhole = Math.floor(item.price || 0);
-                        const priceDecimal = ((item.price || 0) % 1).toFixed(2).substring(1);
+                  (() => {
+                    const filteredItems = dynamicItems.filter(item => {
+                      const matchesSubcategory = selectedSubcategory === 'All' || item.category === selectedSubcategory;
+                      if (!matchesSubcategory) return false;
 
-                        return (
-                          <div
-                            key={idx}
-                            onClick={() => {
-                              handleAddItem(item.category, state.designType === 'room' ? item : { ...item, type: item.category });
-                              setSelectedProductDetails(item);
-                            }}
-                            className="group flex flex-col bg-white border border-gray-150 rounded-2xl p-3 hover:border-black hover:shadow-xl transition-all duration-300 cursor-pointer relative"
-                          >
-                            {/* Product Image */}
-                            <div className="w-full h-28 bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden border border-gray-50 relative group-hover:scale-[1.02] transition-transform duration-300">
-                              {item.imageUrl ? (
-                                <img
-                                  src={`${STATIC_BASE}${item.imageUrl}`}
-                                  alt={item.name}
-                                  className="max-w-[85%] max-h-[85%] object-contain mix-blend-multiply"
-                                />
-                              ) : (
-                                <span className="text-[8px] font-bold text-gray-300 uppercase tracking-widest">No Image</span>
-                              )}
-                            </div>
+                      if (!brandSearchQuery.trim()) return true;
+                      const query = brandSearchQuery.trim().toLowerCase();
+                      const brand = (item.brand || '').toLowerCase();
+                      const name = (item.name || '').toLowerCase();
+                      const sku = (item.sku || '').toLowerCase();
+                      const category = (item.category || '').toLowerCase();
+                      const material = (item.material || '').toLowerCase();
 
-                            {/* Product Details */}
-                            <div className="mt-3 flex-1 flex flex-col">
-                              <h4 className="text-[11px] font-black text-gray-900 leading-tight tracking-tight uppercase group-hover:text-black transition-colors line-clamp-1">
-                                {item.name.split(' ')[0]} / {item.name.split(' ').slice(1).join(' ')}
-                              </h4>
-                              <p className="text-[9px] text-gray-400 font-light mt-0.5 line-clamp-2 leading-relaxed">
-                                {item.name}
-                              </p>
+                      return brand.includes(query) || name.includes(query) || sku.includes(query) || category.includes(query) || material.includes(query);
+                    });
 
-                              <div className="mt-auto pt-3 flex items-baseline justify-between border-t border-gray-50">
-                                <div className="flex items-baseline">
-                                  <span className="text-[9px] font-bold text-gray-900 mr-0.5">Rs</span>
-                                  <span className="text-[15px] font-black text-gray-900 leading-none">{priceWhole.toLocaleString()}</span>
-                                  <span className="text-[9px] font-bold text-gray-900">{priceDecimal}</span>
+                    if (filteredItems.length === 0) {
+                      return (
+                        <div className="flex flex-col items-center justify-center h-48 text-center p-6 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
+                          <p className="text-xs font-bold uppercase tracking-wider text-gray-700">No matching products found</p>
+                          <p className="text-[10px] text-gray-400 mt-1 font-light max-w-xs leading-relaxed">
+                            Try searching with a different brand or product name (e.g. Rocell, Aqua, Grohe).
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-6">
+                        {filteredItems.map((item, idx) => {
+                          const STATIC_BASE = process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api', '') : 'http://localhost:4000';
+                          const priceWhole = Math.floor(item.price || 0);
+                          const priceDecimal = ((item.price || 0) % 1).toFixed(2).substring(1);
+
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                handleAddItem(item.category, state.designType === 'room' ? item : { ...item, type: item.category });
+                                setSelectedProductDetails(item);
+                              }}
+                              className="group flex flex-col bg-white border border-gray-150 rounded-2xl p-3 hover:border-black hover:shadow-xl transition-all duration-300 cursor-pointer relative"
+                            >
+                              {/* Product Image */}
+                              <div className="w-full h-28 bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden border border-gray-50 relative group-hover:scale-[1.02] transition-transform duration-300">
+                                {item.imageUrl ? (
+                                  <img
+                                    src={`${STATIC_BASE}${item.imageUrl}`}
+                                    alt={item.name}
+                                    className="max-w-[85%] max-h-[85%] object-contain mix-blend-multiply"
+                                  />
+                                ) : (
+                                  <span className="text-[8px] font-bold text-gray-300 uppercase tracking-widest">No Image</span>
+                                )}
+                              </div>
+
+                              {/* Product Details */}
+                              <div className="mt-3 flex-1 flex flex-col">
+                                <h4 className="text-[11px] font-black text-gray-900 leading-tight tracking-tight uppercase group-hover:text-black transition-colors line-clamp-1">
+                                  {item.name.split(' ')[0]} / {item.name.split(' ').slice(1).join(' ')}
+                                </h4>
+                                <p className="text-[9px] text-gray-400 font-light mt-0.5 line-clamp-2 leading-relaxed">
+                                  {item.name}
+                                </p>
+
+                                <div className="mt-auto pt-3 flex items-baseline justify-between border-t border-gray-50">
+                                  <div className="flex items-baseline">
+                                    <span className="text-[9px] font-bold text-gray-900 mr-0.5">LKR</span>
+                                    <span className="text-[15px] font-black text-gray-900 leading-none">{priceWhole.toLocaleString()}</span>
+                                    <span className="text-[9px] font-bold text-gray-900">{priceDecimal}</span>
+                                  </div>
+                                  <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-full ${item.quantity > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                                    }`}>
+                                    {item.quantity > 0 ? 'In Stock' : 'Out'}
+                                  </span>
                                 </div>
-                                <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-full ${item.quantity > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                                  }`}>
-                                  {item.quantity > 0 ? 'In Stock' : 'Out'}
-                                </span>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                  </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()
                 )}
               </div>
             </div>
@@ -976,9 +1081,6 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
       {/* ── SELECTED ITEM ACTIONS ── */}
       {selectedItem && !isPlacingItem && (
         <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-[#1A1A1A] border border-white/10 shadow-2xl rounded-full px-5 py-3 flex items-center gap-4 z-30 text-white">
-          <span className="text-xs font-semibold tracking-wide border-r border-white/15 pr-4">
-            Selected: <strong className="text-gray-200">{selectedItem.name}</strong>
-          </span>
           {!isDoor && !(selectedItem as any).isOpening && (
             <button
               id="btn-rotate"

@@ -5,6 +5,7 @@ import { UnifiedItem } from '../types';
 import { formatLKR, getFallbackImage, getProductSlug } from '../utils';
 import { STATIC_BASE } from '../constants';
 import { useCart } from '../../cart/hooks/useCart';
+import { useDesignerStore } from '../../../store/designer.store';
 
 interface ProductCardProps {
   product: UnifiedItem;
@@ -39,7 +40,7 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({ product }) 
       setShowModal(false);
       setTimeout(() => setJustAdded(false), 2500);
     } else {
-      alert(res.error || 'Failed to add item to cart');
+      useDesignerStore.getState().showAlert(res.error || 'Failed to add item to cart');
     }
   };
 

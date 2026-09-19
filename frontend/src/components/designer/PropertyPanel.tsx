@@ -18,6 +18,8 @@ export default function PropertyPanel() {
 
   if (!store.selectedItemId || !selectedItem) return null;
 
+  const currentScaleFactor = ('scale' in selectedItem && selectedItem.scale?.x) ? Number(selectedItem.scale.x) : 1.0;
+
   return (
     <div className="absolute top-20 sm:top-24 right-4 sm:right-[440px] w-64 max-w-[calc(100vw-2rem)] bg-white/95 backdrop-blur-xl border border-gray-200 shadow-2xl rounded-2xl overflow-hidden z-20 animate-in fade-in slide-in-from-right-4 duration-300">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
@@ -30,29 +32,67 @@ export default function PropertyPanel() {
           <div className="text-sm font-semibold text-gray-900 bg-gray-100/50 px-3 py-2 rounded-lg border border-gray-100">{selectedItem.name}</div>
         </div>
         {!selectedItem.isOpening && (
-          <div>
-            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block mb-2">Rotation</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  store.recordHistory(store.placedItems);
-                  store.setPlacedItems(prev => prev.map(i => i.id === store.selectedItemId ? { ...i, rotation: i.rotation - Math.PI / 2 } : i));
-                }}
-                className="flex-1 flex items-center justify-center gap-1 bg-gray-50 hover:bg-gray-100 border border-gray-200 py-2 rounded-lg text-xs font-semibold text-gray-700 transition-colors"
-              >
-                <RotateCw className="w-3.5 h-3.5 -scale-x-100" /> -90°
-              </button>
-              <button
-                onClick={() => {
-                  store.recordHistory(store.placedItems);
-                  store.setPlacedItems(prev => prev.map(i => i.id === store.selectedItemId ? { ...i, rotation: i.rotation + Math.PI / 2 } : i));
-                }}
-                className="flex-1 flex items-center justify-center gap-1 bg-gray-50 hover:bg-gray-100 border border-gray-200 py-2 rounded-lg text-xs font-semibold text-gray-700 transition-colors"
-              >
-                <RotateCw className="w-3.5 h-3.5" /> +90°
-              </button>
+          <>
+            <div>
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block mb-2">3D Model Size</label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    store.recordHistory(store.placedItems);
+                    store.setPlacedItems(prev => prev.map(i => {
+                      if (i.id !== store.selectedItemId) return i;
+                      const cur = i.scale?.x ? Number(i.scale.x) : 1.0;
+                      const nextS = Math.max(0.4, parseFloat((cur - 0.25).toFixed(2)));
+                      return { ...i, scale: { x: nextS, y: nextS, z: nextS } };
+                    }));
+                  }}
+                  className="flex-1 bg-gray-50 hover:bg-gray-100 border border-gray-200 py-1.5 rounded-lg text-xs font-bold text-gray-700 transition-colors"
+                >
+                  - Smaller
+                </button>
+                <span className="text-xs font-mono font-bold text-gray-800 w-12 text-center bg-gray-100 py-1 rounded">
+                  {Math.round(currentScaleFactor * 100)}%
+                </span>
+                <button
+                  onClick={() => {
+                    store.recordHistory(store.placedItems);
+                    store.setPlacedItems(prev => prev.map(i => {
+                      if (i.id !== store.selectedItemId) return i;
+                      const cur = i.scale?.x ? Number(i.scale.x) : 1.0;
+                      const nextS = Math.min(3.5, parseFloat((cur + 0.25).toFixed(2)));
+                      return { ...i, scale: { x: nextS, y: nextS, z: nextS } };
+                    }));
+                  }}
+                  className="flex-1 bg-gray-50 hover:bg-gray-100 border border-gray-200 py-1.5 rounded-lg text-xs font-bold text-gray-700 transition-colors"
+                >
+                  + Larger
+                </button>
+              </div>
             </div>
-          </div>
+            <div>
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block mb-2">Rotation</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    store.recordHistory(store.placedItems);
+                    store.setPlacedItems(prev => prev.map(i => i.id === store.selectedItemId ? { ...i, rotation: i.rotation - Math.PI / 2 } : i));
+                  }}
+                  className="flex-1 flex items-center justify-center gap-1 bg-gray-50 hover:bg-gray-100 border border-gray-200 py-2 rounded-lg text-xs font-semibold text-gray-700 transition-colors"
+                >
+                  <RotateCw className="w-3.5 h-3.5 -scale-x-100" /> -90°
+                </button>
+                <button
+                  onClick={() => {
+                    store.recordHistory(store.placedItems);
+                    store.setPlacedItems(prev => prev.map(i => i.id === store.selectedItemId ? { ...i, rotation: i.rotation + Math.PI / 2 } : i));
+                  }}
+                  className="flex-1 flex items-center justify-center gap-1 bg-gray-50 hover:bg-gray-100 border border-gray-200 py-2 rounded-lg text-xs font-semibold text-gray-700 transition-colors"
+                >
+                  <RotateCw className="w-3.5 h-3.5" /> +90°
+                </button>
+              </div>
+            </div>
+          </>
         )}
         <div className="pt-2 border-t border-gray-100">
           <button

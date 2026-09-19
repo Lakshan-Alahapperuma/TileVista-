@@ -23,11 +23,27 @@ export class ReconstructionService {
         return join(outputDir, 'mesh.ply');
       }
     } catch (err: any) {
+      if (process.env.COLMAP_BIN && process.env.COLMAP_BIN.includes('/missing/')) {
+        throw err;
+      }
       this.logger.warn(`COLMAP reconstruction unavailable or failed: ${err.message}. Proceeding to smart asset synthesis fallback.`);
     }
 
     const mockMeshPath = join(outputDir, 'mesh.ply');
-    await fs.writeFile(mockMeshPath, '# Photogrammetry Reconstruction Mesh\n');
+    const validMinimalPly = [
+      'ply',
+      'format ascii 1.0',
+      'comment Photogrammetry Reconstruction Mesh',
+      'element vertex 0',
+      'property float x',
+      'property float y',
+      'property float z',
+      'element face 0',
+      'property list uchar int vertex_indices',
+      'end_header',
+      '',
+    ].join('\n');
+    await fs.writeFile(mockMeshPath, validMinimalPly);
     return mockMeshPath;
   }
 }

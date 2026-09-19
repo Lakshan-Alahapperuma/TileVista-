@@ -1,6 +1,17 @@
 export type RoomShape = 'rectangular' | 'square' | 'l-shape' | 't-shape' | 'u-shape' | 'custom';
 export type UnitSystem = 'feet' | 'cm';
 
+export interface TileItemDetails {
+  itemId?: string | number;
+  name?: string;
+  imageUrl?: string;
+  price?: number;
+  dimensions?: { width: number; height: number; depth?: number; unit?: string } | null;
+  size?: string | null;
+  widthCm?: number;
+  heightCm?: number;
+}
+
 export interface WallSplitDesign {
   splitMode: 'full' | 'horizontal' | 'vertical';
   tileColorBottom: string;
@@ -10,6 +21,7 @@ export interface WallSplitDesign {
   textureUrl?: string;
   textureCoverageHeight?: number;
   tileAssetId?: string;
+  tileItem?: TileItemDetails;
 }
 
 export interface PlacedItem {
@@ -24,6 +36,7 @@ export interface PlacedItem {
   image?: string;
   isWallMounted: boolean;
   rotationOffset?: number;
+  scale?: { x?: number; y?: number; z?: number };
 }
 
 export interface WallOpening {
@@ -46,9 +59,12 @@ export interface DesignState {
   unit: UnitSystem;
   floorColor: string;
   floorTextureUrl?: string;
+  floorTileItem?: TileItemDetails;
   wallTextureUrl?: string;
+  wallTileItem?: TileItemDetails;
   wallDesigns: WallSplitDesign[];
   designType: 'room' | 'bathroom';
   subRoomType?: 'dining_room' | 'bed_room' | 'living_room';
   wallOpenings: WallOpening[];
+  wastagePercent?: number;
 }

@@ -5,12 +5,15 @@ import { useRouter } from 'next/navigation';
 import { Plus, Edit2, Trash2, Loader2, Sparkles, Percent } from 'lucide-react';
 import { Package } from '../../../../types/package';
 import { packageService } from '../../../../services/package.service';
+import { useDesignerStore } from '../../../../store/designer.store';
+import CustomAlertModal from '../../../../components/ui/CustomAlertModal';
 
 export default function AdminPackagesPage() {
   const router = useRouter();
   const [packages, setPackages] = useState<Package[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const showAlert = useDesignerStore((s) => s.showAlert);
 
   const loadPackages = async () => {
     setLoading(true);
@@ -34,9 +37,9 @@ export default function AdminPackagesPage() {
     try {
       await packageService.deletePackage(id);
       setPackages(prev => prev.filter(pkg => pkg.id !== id));
-      alert('Package deleted successfully.');
+      showAlert('Package deleted successfully.');
     } catch (err: any) {
-      alert(`Error deleting package: ${err.message}`);
+      showAlert(`Error deleting package: ${err.message}`);
     }
   };
 
@@ -172,6 +175,7 @@ export default function AdminPackagesPage() {
           </div>
         </div>
       )}
+      <CustomAlertModal />
     </div>
   );
 }

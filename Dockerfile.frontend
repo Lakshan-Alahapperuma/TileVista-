@@ -1,0 +1,48 @@
+# Multi-stage Dockerfile for TileVista Frontend (Next.js + NPM Workspace)
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy root package definitions
+COPY package.json package-lock.json ./
+COPY shared/types/package.json ./shared/types/
+COPY frontend/package.json ./frontend/
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY shared ./shared
+COPY frontend ./frontend
+
+# Build shared package
+RUN npm run build:shared
+
+# Build Next.js app with environment variables
+ARG NEXT_PUBLIC_API_URL=http://localhost:4000/api
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
+RUN npm run build:frontend
+
+# Production stage
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+COPY package.json package-lock.json ./
+COPY shared/types/package.json ./shared/types/
+COPY frontend/package.json ./frontend/
+
+RUN npm ci --only=production
+
+COPY --from=builder /app/frontend/.next ./frontend/.next
+COPY --from=builder /app/frontend/public ./frontend/public
+COPY --from=builder /app/shared/types/dist ./shared/types/dist
+COPY --from=builder /app/node_modules ./node_modules
+
+EXPOSE 3000
+
+CMD ["npm", "run", "start", "--workspace=frontend"]

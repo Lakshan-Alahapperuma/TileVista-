@@ -34,15 +34,9 @@ export class ModelGeneratorService {
       if (!Number.isSafeInteger(itemId) || itemId < 1) {
         throw new BadRequestException('Invalid item ID.');
       }
-      let product = await this.prisma.products.findUnique({ where: { ospos_item_id: itemId } });
+      const product = await this.prisma.products.findUnique({ where: { ospos_item_id: itemId } });
       if (!product) {
-        await this.prisma.products.create({
-          data: {
-            product_id: randomUUID(),
-            ospos_item_id: itemId,
-            is_active: true,
-          },
-        });
+        throw new BadRequestException('Invalid item ID: existing catalog item not found.');
       }
     }
 

@@ -1,13 +1,18 @@
 import React from 'react';
 import { Menu, ArrowLeft } from 'lucide-react';
 import { useDesignerStore } from '../../store/designer.store';
+import { calculateDesignTileSummary } from './tileCalculation';
 
 export default function DesignerToolbar({ onSave, readOnly = false }: { onSave: () => Promise<void>, readOnly?: boolean }) {
   if (readOnly) return null;
 
   const store = useDesignerStore();
-  
-  const totalPrice = store.placedItems.reduce((acc, item) => acc + (item.cost || 0), 0);
+  const catalogItems = useDesignerStore((s) => s.catalogItems);
+
+  const isBathroom = store.state?.designType === 'bathroom' || store.selectedRoomType === 'bathroom';
+  const tileSummary = calculateDesignTileSummary(store.state, catalogItems, store.wastagePercent, store.customWastageTiles);
+  const placedTotal = isBathroom ? store.placedItems.reduce((acc, item) => acc + (item.cost || 0), 0) : 0;
+  const totalPrice = placedTotal + tileSummary.totalTileCost;
 
   return (
     <>
@@ -37,24 +42,22 @@ export default function DesignerToolbar({ onSave, readOnly = false }: { onSave: 
         </div>
       </div>
 
-      {store.state.designType === 'bathroom' && (
-        <div className="absolute bottom-6 left-6 z-30 pointer-events-auto">
-          <div id="price-display" className="bg-white border border-gray-200 shadow-lg rounded-full h-12 px-2 py-1 flex items-center gap-4">
-            <div className="flex items-center gap-2 pl-4">
-              <span className="font-bold text-sm text-gray-400">Rs</span>
-              <span className="font-mono font-bold text-base text-[#1A1A1A]">{totalPrice.toFixed(2)}</span>
-            </div>
-            <button
-              id="btn-summary"
-              onClick={() => store.setShowSummaryModal(true)}
-              className="px-5 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center gap-2 text-[10px] font-bold tracking-widest uppercase text-[#1A1A1A] transition-all"
-            >
-              Summary
-              <ArrowLeft className="rotate-180" size={10} />
-            </button>
+      <div className="absolute bottom-6 left-6 z-30 pointer-events-auto">
+        <div id="price-display" className="bg-white border border-gray-200 shadow-lg rounded-full h-12 px-2 py-1 flex items-center gap-4">
+          <div className="flex items-center gap-2 pl-4">
+            <span className="font-bold text-sm text-gray-400">LKR</span>
+            <span className="font-mono font-bold text-base text-[#1A1A1A]">{totalPrice.toFixed(2)}</span>
           </div>
+          <button
+            id="btn-summary"
+            onClick={() => store.setShowSummaryModal(true)}
+            className="px-5 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center gap-2 text-[10px] font-bold tracking-widest uppercase text-[#1A1A1A] transition-all"
+          >
+            Summary
+            <ArrowLeft className="rotate-180" size={10} />
+          </button>
         </div>
-      )}
+      </div>
     </>
   );
 }

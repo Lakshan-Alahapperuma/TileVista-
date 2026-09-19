@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { v4 as uuidv4 } from 'uuid';
 import { CartItem } from '@tilevista/types';
 import { CartApi } from '../api/cart.api';
+import { useDesignerStore } from '../../../store/designer.store';
+import CustomAlertModal from '../../../components/ui/CustomAlertModal';
 
 interface CartContextType {
   items: CartItem[];
@@ -70,7 +72,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setItems(data);
     } catch (err: any) {
       setError(err.message || 'Failed to update quantity');
-      alert(err.message);
+      useDesignerStore.getState().showAlert(err.message);
     }
   };
 
@@ -97,6 +99,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <CartContext.Provider value={{ items, loading, error, addItem, updateQuantity, removeItem, clearCart }}>
       {children}
+      <CustomAlertModal />
     </CartContext.Provider>
   );
 };

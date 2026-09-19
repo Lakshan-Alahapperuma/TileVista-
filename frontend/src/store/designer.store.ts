@@ -50,6 +50,9 @@ interface DesignerStoreState {
   redoStack: PlacedItem[][];
   alertMessage: string | null;
   doorSizeModal: DoorSizeModalState | null;
+  catalogItems: any[];
+  wastagePercent: number;
+  customWastageTiles: Record<string, number>;
 }
 
 interface DesignerStoreActions {
@@ -91,6 +94,9 @@ interface DesignerStoreActions {
   showAlert: (msg: string) => void;
   hideAlert: () => void;
   setDoorSizeModal: (modal: DoorSizeModalState | null) => void;
+  setCatalogItems: (items: any[]) => void;
+  setWastagePercent: (val: number) => void;
+  setCustomWastageTile: (key: string, count: number) => void;
 
   recordHistory: (next: PlacedItem[]) => void;
   handleUndo: () => void;
@@ -116,6 +122,7 @@ const INITIAL: DesignState = {
   designType: 'bathroom',
   subRoomType: 'living_room',
   wallOpenings: [],
+  wastagePercent: 10,
 };
 
 export const useDesignerStore = create<DesignerStoreState & DesignerStoreActions>((set, get) => ({
@@ -156,9 +163,17 @@ export const useDesignerStore = create<DesignerStoreState & DesignerStoreActions
   redoStack: [],
   alertMessage: null,
   doorSizeModal: null,
+  catalogItems: [],
+  wastagePercent: 10,
+  customWastageTiles: {},
   showAlert: (msg) => set({ alertMessage: msg }),
   hideAlert: () => set({ alertMessage: null }),
   setDoorSizeModal: (modal) => set({ doorSizeModal: modal }),
+  setCatalogItems: (catalogItems) => set({ catalogItems }),
+  setWastagePercent: (val) => set((prev) => ({ wastagePercent: val, state: { ...prev.state, wastagePercent: val } })),
+  setCustomWastageTile: (key, count) => set((prev) => ({
+    customWastageTiles: { ...prev.customWastageTiles, [key]: Math.max(0, count) }
+  })),
 
   setState: (updater) => set((prev) => ({
     state: typeof updater === 'function' ? updater(prev.state) : { ...prev.state, ...updater }

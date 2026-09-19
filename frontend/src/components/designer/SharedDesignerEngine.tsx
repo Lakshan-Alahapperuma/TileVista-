@@ -24,6 +24,7 @@ import { useAuth } from '../../features/auth/AuthContext';
 import DesignerToolbar from './DesignerToolbar';
 import ProductPanel from './ProductPanel';
 import SaveDesignModal from './SaveDesignModal';
+import { parseTileDimensions } from './tileCalculation';
 
 export function remoteLog(message: string, ...args: any[]) {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
@@ -36,8 +37,7 @@ export function remoteLog(message: string, ...args: any[]) {
 
 // ─── TYPES 
 
-type RoomShape = 'rectangular' | 'square' | 'l-shape' | 't-shape' | 'u-shape' | 'custom';
-type UnitSystem = 'feet' | 'cm';
+import { RoomShape, UnitSystem, TileItemDetails } from '../../types/designer';
 
 interface WallSplitDesign {
   splitMode: 'full' | 'horizontal' | 'vertical';
@@ -48,6 +48,7 @@ interface WallSplitDesign {
   textureUrl?: string;
   textureCoverageHeight?: number;
   tileAssetId?: string;
+  tileItem?: TileItemDetails;
 }
 
 interface PlacedItem {
@@ -62,6 +63,7 @@ interface PlacedItem {
   image?: string;
   isWallMounted: boolean;
   rotationOffset?: number;
+  scale?: { x?: number; y?: number; z?: number };
 }
 
 interface WallOpening {
@@ -88,7 +90,9 @@ interface DesignState {
   subRoomType?: 'dining_room' | 'bed_room' | 'living_room';
   wallOpenings: WallOpening[];
   floorTextureUrl?: string;
+  floorTileItem?: TileItemDetails;
   wallTextureUrl?: string;
+  wallTileItem?: TileItemDetails;
 }
 
 
@@ -350,6 +354,7 @@ function getOverlap(minA: number, maxA: number, minB: number, maxB: number): [nu
 
 // Tile texture cache (canvas-generated with grout lines)
 const tileTextureCache: Record<string, THREE.CanvasTexture> = {};
+const clonedTextureCache = new Map<string, THREE.Texture>();
 
 function getTileTexture(color: string, repeatX: number, repeatY: number) {
   const key = `${color}_${repeatX}_${repeatY}`;
@@ -549,7 +554,19 @@ function RugModel({ selected }: { selected: boolean }) {
 const isBathtub = (type?: string, name?: string) => {
   const t = (type || '').toLowerCase();
   const n = (name || '').toLowerCase();
-  return t === 'bathtub' || n.includes('bath tub') || n.includes('bathtub') || n.includes('bath');
+  return (
+    t === 'bathtub' ||
+    t === 'bath' ||
+    t === 'tub' ||
+    n.includes('bath tub') ||
+    n.includes('bathtub') ||
+    n.includes('bath') ||
+    n.includes('tub') ||
+    n.includes('soaker') ||
+    n.includes('jacuzzi') ||
+    n.includes('freestanding') ||
+    n.includes('oval')
+  );
 };
 
 const isShower = (type?: string, name?: string) => {
@@ -652,80 +669,78 @@ export function calculateRealWorldScale(item: any, size: THREE.Vector3): number 
   const horizDim = Math.max(size.x, size.z);
 
   // Target physical dimensions in real-world METERS
-  let targetWorldMeters = 0.60;
+  let targetWorldMeters = 0.70;
   let scaleDimension = maxDim; // Default to max dimension of GLB model
 
   if (isSink(t, nameLower)) {
     const aspectRatio = size.y / horizDim;
     if (aspectRatio < 0.75 || checkIsWallMounted(item)) {
-      // Wall-hung basin / counter basin: scale width to 0.60 meters (60 cm)
-      targetWorldMeters = 0.60;
+      // Wall-hung basin / counter basin: scale width to 0.65 meters (65 cm)
+      targetWorldMeters = 0.65;
       scaleDimension = horizDim;
     } else {
-      // Pedestal basin: scale total height to 0.85 meters (85 cm)
-      targetWorldMeters = 0.85;
+      // Pedestal basin: scale total height to 0.90 meters (90 cm)
+      targetWorldMeters = 0.90;
       scaleDimension = size.y;
     }
   } else if (t === 'toilet' || nameLower.includes('toilet') || nameLower.includes('closet') || nameLower.includes('wc') || nameLower.includes('commode')) {
     const aspectRatio = size.y / horizDim;
-    if (aspectRatio < 0.80 || nameLower.includes('wall')) {
-      targetWorldMeters = 0.55; // Wall-hung toilet: 55 cm depth
+    if (aspectRatio < 0.75 || nameLower.includes('wall')) {
+      targetWorldMeters = 0.60; // Wall-hung toilet: 60 cm depth
       scaleDimension = horizDim;
     } else {
-      targetWorldMeters = 0.75; // Floor toilet with tank: 75 cm height
+      targetWorldMeters = 0.82; // Floor toilet with tank: 82 cm height (2.7 ft)
       scaleDimension = size.y;
     }
   } else if (isBathtub(t, nameLower)) {
-    targetWorldMeters = 1.65; // Bathtub length: 165 cm
-    scaleDimension = horizDim;
+    targetWorldMeters = 2.10; // Bathtub length: 2.10 meters (210 cm / 6.9 ft)
+    scaleDimension = maxDim;
   } else if (isShower(t, nameLower)) {
     if (nameLower.includes('enclosure') || nameLower.includes('box') || nameLower.includes('cabin')) {
-      targetWorldMeters = 2.00; // Shower glass box / enclosure height: 200 cm
+      targetWorldMeters = 2.15; // Shower glass box / enclosure height: 215 cm
       scaleDimension = size.y;
-    } else if (nameLower.includes('column') || nameLower.includes('riser') || nameLower.includes('system') || nameLower.includes('exposed') || nameLower.includes('thermostatic') || (size.y / horizDim) > 1.8) {
-      targetWorldMeters = 1.15; // Tall shower column height: 115 cm
+    } else if (nameLower.includes('column') || nameLower.includes('riser') || nameLower.includes('system') || nameLower.includes('exposed') || nameLower.includes('thermostatic') || (size.y / horizDim) > 1.5) {
+      targetWorldMeters = 1.10; // Shower column height: 110 cm
       scaleDimension = size.y;
     } else {
-      // Wall rain shower arm / head / hand shower set:
-      // Sized prominently to 0.55 meters (55 cm reach/size) so it looks prominent and natural
-      targetWorldMeters = 0.55;
+      targetWorldMeters = 0.45; // Wall shower head / mixer set: 45 cm
       scaleDimension = maxDim;
     }
   } else if (t === 'washing_machine' || nameLower.includes('wash') || nameLower.includes('machine')) {
-    targetWorldMeters = 0.85; // Washing machine height: 85 cm
+    targetWorldMeters = 0.90; // Washing machine height: 90 cm
     scaleDimension = size.y;
   } else if (t === 'mirror' || nameLower.includes('mirror')) {
-    targetWorldMeters = 0.75; // Mirror max dimension: 75 cm
+    targetWorldMeters = 0.85; // Mirror max dimension: 85 cm
     scaleDimension = maxDim;
   } else if (t === 'light' || nameLower.includes('light')) {
-    targetWorldMeters = 0.35; // Light max dimension: 35 cm
+    targetWorldMeters = 0.40; // Light max dimension: 40 cm
     scaleDimension = maxDim;
   } else if (t === 'towel_rail' || nameLower.includes('towel') || nameLower.includes('holder') || nameLower.includes('soap') || nameLower.includes('paper') || nameLower.includes('hook')) {
-    targetWorldMeters = 0.50; // Accessories max dimension: 50 cm
+    targetWorldMeters = 0.60; // Accessories max dimension: 60 cm
     scaleDimension = maxDim;
   } else if (t === 'beds' || t === 'bed') {
-    targetWorldMeters = 2.00; // Bed length/width: 200 cm
+    targetWorldMeters = 2.10; // Bed length/width: 210 cm
     scaleDimension = horizDim;
   } else if (t === 'sofa' || t === 'sofas') {
-    targetWorldMeters = 2.10; // Sofa length: 210 cm
+    targetWorldMeters = 2.20; // Sofa length: 220 cm
     scaleDimension = horizDim;
   } else if (t === 'wardrobes' || t === 'wardrobe') {
-    targetWorldMeters = 2.10; // Wardrobe height: 210 cm
+    targetWorldMeters = 2.20; // Wardrobe height: 220 cm
     scaleDimension = size.y;
   } else if (t === 'table' || t === 'dressing_table') {
-    targetWorldMeters = 1.50; // Table length: 150 cm
+    targetWorldMeters = 1.60; // Table length: 160 cm
     scaleDimension = horizDim;
   } else if (t === 'chair' || t === 'chairs') {
-    targetWorldMeters = 0.90; // Chair height: 90 cm
+    targetWorldMeters = 0.95; // Chair height: 95 cm
     scaleDimension = size.y;
   } else if (t === 'tv_cabinet' || t === 'cabinet') {
-    targetWorldMeters = 1.50; // Cabinet length: 150 cm
+    targetWorldMeters = 1.60; // Cabinet length: 160 cm
     scaleDimension = horizDim;
   } else if (t === 'coffee_table') {
-    targetWorldMeters = 1.00; // Coffee table length: 100 cm
+    targetWorldMeters = 1.10; // Coffee table length: 110 cm
     scaleDimension = horizDim;
   } else {
-    targetWorldMeters = 0.80; // Default fallback: 80 cm
+    targetWorldMeters = 0.90; // Default fallback: 90 cm
     scaleDimension = maxDim;
   }
 
@@ -738,21 +753,43 @@ export function calculateRealWorldScale(item: any, size: THREE.Vector3): number 
   return 1.0;
 }
 
+class ModelErrorBoundary extends React.Component<
+  { item: any; selected: boolean; children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: any) {
+    console.warn("GLTF Model load failed, using fallback:", error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return <FallbackColoredBox item={this.props.item} selected={this.props.selected} />;
+    }
+    return this.props.children;
+  }
+}
+
 function DynamicFurnitureModel({ item, selected, CustomFurniture }: { item: any, selected: boolean, CustomFurniture?: any }) {
-  // If a GLB model exists, ALWAYS prioritize it over the procedural models
+  // If a GLB model exists, ALWAYS prioritize it over procedural models with safety error boundary
   if (item.model) {
     return (
-      <React.Suspense fallback={<FallbackModel item={item} selected={selected} />}>
-        <GLBModel url={item.model} selected={selected} item={item} />
-      </React.Suspense>
+      <ModelErrorBoundary item={item} selected={selected}>
+        <React.Suspense fallback={<FallbackModel item={item} selected={selected} />}>
+          <GLBModel url={item.model} selected={selected} item={item} />
+        </React.Suspense>
+      </ModelErrorBoundary>
     );
   }
 
   if (CustomFurniture) {
     return <CustomFurniture item={item} selected={selected} />;
   }
-  return <FallbackColoredBox item={item} selected={selected} />;
-
   return <FallbackColoredBox item={item} selected={selected} />;
 }
 
@@ -786,17 +823,30 @@ function GLBModel({ url, selected, item }: { url: string, selected: boolean, ite
     let scale = calculateRealWorldScale(item, size);
 
     // Cap scale based on room size so items don't overflow small rooms
-    if (state && state.widthFt && state.depthFt) {
-      const wMeters = state.widthFt * 0.3048;
-      const dMeters = state.depthFt * 0.3048;
-      const maxRoomDim = Math.min(Math.max(1.5, wMeters), Math.max(1.5, dMeters));
+    if (state && (state.widthFt || (state as any).width) && (state.depthFt || (state as any).length)) {
+      const rawW = state.widthFt ?? (state as any).width ?? 12;
+      const rawD = state.depthFt ?? (state as any).length ?? 9;
+      const wMeters = rawW > 25 ? rawW * 0.3048 : (rawW > 10 ? rawW * 0.3048 : rawW);
+      const dMeters = rawD > 25 ? rawD * 0.3048 : (rawD > 10 ? rawD * 0.3048 : rawD);
 
-      const limitFactor = (isBathtub(item.type, item.name) || item.type === 'beds' || item.type === 'bed' || item.type === 'sofa' || item.type === 'sofas') ? 0.95 : 0.85;
-      const maxTargetWorldSize = maxRoomDim * limitFactor;
-      const currentTargetWorldSize = (Math.max(size.x, size.y, size.z) * scale) * 0.3048;
+      const isBathtubItem = isBathtub(item.type, item.name);
+      if (isBathtubItem) {
+        const maxRoomDim = Math.max(wMeters, dMeters);
+        const maxTargetWorldSize = Math.max(1.80, maxRoomDim * 0.95);
+        const currentTargetWorldSize = (Math.max(size.x, size.y, size.z) * scale) * 0.3048;
 
-      if (currentTargetWorldSize > maxTargetWorldSize) {
-        scale = scale * (maxTargetWorldSize / currentTargetWorldSize);
+        if (currentTargetWorldSize > maxTargetWorldSize) {
+          scale = scale * (maxTargetWorldSize / currentTargetWorldSize);
+        }
+      } else {
+        const maxRoomDim = Math.min(Math.max(1.5, wMeters), Math.max(1.5, dMeters));
+        const limitFactor = (item.type === 'beds' || item.type === 'bed' || item.type === 'sofa' || item.type === 'sofas') ? 0.95 : 0.85;
+        const maxTargetWorldSize = maxRoomDim * limitFactor;
+        const currentTargetWorldSize = (Math.max(size.x, size.y, size.z) * scale) * 0.3048;
+
+        if (currentTargetWorldSize > maxTargetWorldSize) {
+          scale = scale * (maxTargetWorldSize / currentTargetWorldSize);
+        }
       }
     }
 
@@ -2239,8 +2289,8 @@ function getItemDimensions(type: string, name?: string): { width: number, depth:
   if (t === 'coffee_table') return { width: 1.1, depth: 1.1 };
 
   if (isSink(t, name)) return { width: 1.6 * 0.3048, depth: 1.4 * 0.3048 };
-  if (isBathtub(t, name)) return { width: 4.3 * 0.3048, depth: 2.3 * 0.3048 };
-  if (isShower(t, name)) return { width: 3.0 * 0.3048, depth: 3.0 * 0.3048 };
+  if (isBathtub(t, name)) return { width: 7.9 * 0.3048, depth: 3.8 * 0.3048 };
+  if (isShower(t, name)) return { width: 2.2 * 0.3048, depth: 2.2 * 0.3048 };
   if (t === 'toilet') return { width: 1.4 * 0.3048, depth: 2.2 * 0.3048 };
   if (t === 'towel_rail') return { width: 1.8 * 0.3048, depth: 0.4 * 0.3048 };
   if (t === 'washing_machine') return { width: 2.0 * 0.3048, depth: 2.0 * 0.3048 };
@@ -2585,18 +2635,22 @@ function BathroomScene({
   const [osposFloorTexture, setOsposFloorTexture] = useState<THREE.Texture | null>(null);
   const [osposWallTextures, setOsposWallTextures] = useState<Record<string, THREE.Texture>>({});
 
+  const catalogItems = useDesignerStore((s) => s.catalogItems);
+
   useEffect(() => {
     if (state.floorTextureUrl) {
       new THREE.TextureLoader().load(state.floorTextureUrl, (tex) => {
         tex.wrapS = THREE.RepeatWrapping;
         tex.wrapT = THREE.RepeatWrapping;
-        tex.repeat.set(w / 0.6, d / 0.6);
+        const tileItem = state.floorTileItem || catalogItems.find(i => i.imageUrl && state.floorTextureUrl?.includes(i.imageUrl));
+        const dims = parseTileDimensions(tileItem);
+        tex.repeat.set(w / dims.widthM, d / dims.heightM);
         setOsposFloorTexture(tex);
       });
     } else {
       setOsposFloorTexture(null);
     }
-  }, [state.floorTextureUrl, w, d]);
+  }, [state.floorTextureUrl, state.floorTileItem, catalogItems, w, d]);
 
   useEffect(() => {
     const urlsToLoad = new Set<string>();
@@ -3094,8 +3148,15 @@ function BathroomScene({
         setOrbitEnabled(true);
       }
       if (isPlacingItem && hasMovedInScene) {
-        recordHistory([...placedItems, isPlacingItem]);
-        setPlacedItems(prev => [...prev, isPlacingItem]);
+        const store = useDesignerStore.getState();
+        const currentList = store.placedItems.length > 0 ? store.placedItems : placedItems;
+        const exists = currentList.some(i => String(i.id) === String(isPlacingItem.id));
+        if (!exists) {
+          const next = [...currentList, isPlacingItem];
+          recordHistory(next);
+          setPlacedItems(next);
+          store.setPlacedItems(next);
+        }
         setIsPlacingItem(null);
         setOrbitEnabled(true);
       }
@@ -3223,16 +3284,24 @@ function BathroomScene({
         const thickness = 0.08;
 
         const getMat = (color: string, w: number, y: number) => {
+          const texUrl = state.designType === 'bathroom' ? design.textureUrl : state.wallTextureUrl;
+          if (texUrl && osposWallTextures[texUrl]) {
+            const roundedW = Math.round(w * 100) / 100;
+            const roundedY = Math.round(y * 100) / 100;
+            const tileItem = (state.designType === 'bathroom' ? design.tileItem : state.wallTileItem) || catalogItems.find(i => (i.imageUrl && texUrl.includes(i.imageUrl)) || (design?.tileAssetId && String(i.itemId) === String(design.tileAssetId)));
+            const dims = parseTileDimensions(tileItem);
+            const key = `${texUrl}_${roundedW}_${roundedY}_${dims.widthM}_${dims.heightM}`;
+            let clonedTex = clonedTextureCache.get(key);
+            if (!clonedTex) {
+              clonedTex = osposWallTextures[texUrl].clone();
+              clonedTex.repeat.set(roundedW / dims.widthM, roundedY / dims.heightM);
+              clonedTex.needsUpdate = true;
+              clonedTextureCache.set(key, clonedTex);
+            }
+            return { map: clonedTex, roughness: 0.4, side: THREE.DoubleSide, transparent: true };
+          }
           if (state.designType === 'room') {
             return { color, roughness: 0.95, metalness: 0.05, side: THREE.DoubleSide, transparent: true };
-          }
-          const texUrl = design.textureUrl;
-          if (texUrl && osposWallTextures[texUrl]) {
-            const clonedTex = osposWallTextures[texUrl].clone();
-            // Scale based on the specific wall segment dimensions
-            clonedTex.repeat.set(w / 0.6, y / 0.3);
-            clonedTex.needsUpdate = true;
-            return { map: clonedTex, roughness: 0.4, side: THREE.DoubleSide, transparent: true };
           }
           return { map: getTileTexture(color, Math.max(1, Math.round(w * 0.8)), Math.max(1, Math.round(y * 0.8))), roughness: 0.4, side: THREE.DoubleSide, transparent: true };
         };
@@ -3654,17 +3723,21 @@ function BathroomScene({
       {/* Placing-item ghost */}
       {isPlacingItem && (
         <group position={isPlacingItem.position} rotation={[0, isPlacingItem.rotation, 0]} scale={[0.3048, 0.3048, 0.3048]}>
-          {isPlacingItem.type === 'sink' && <SinkModel selected />}
-          {isPlacingItem.type === 'bathtub' && <BathtubModel selected />}
-          {isPlacingItem.type === 'shower' && <ShowerModel selected />}
-          {isPlacingItem.type === 'toilet' && <ToiletModel selected />}
-          {isPlacingItem.type === 'towel_rail' && <TowelRailModel selected />}
-          {isPlacingItem.type === 'washing_machine' && <WashingMachineModel selected />}
-          {isPlacingItem.type === 'light' && <WallLightModel selected />}
-
-          {/* Dynamic Furniture Models (fallback to 2D image) */}
-          {!['sink', 'bathtub', 'shower', 'toilet', 'towel_rail', 'washing_machine', 'light', 'plant'].includes(isPlacingItem.type) && (
+          {isPlacingItem.model ? (
             <DynamicFurnitureModel item={isPlacingItem} selected={true} CustomFurniture={CustomFurniture} />
+          ) : (
+            <>
+              {isPlacingItem.type === 'sink' && <SinkModel selected />}
+              {isPlacingItem.type === 'bathtub' && <BathtubModel selected />}
+              {isPlacingItem.type === 'shower' && <ShowerModel selected />}
+              {isPlacingItem.type === 'toilet' && <ToiletModel selected />}
+              {isPlacingItem.type === 'towel_rail' && <TowelRailModel selected />}
+              {isPlacingItem.type === 'washing_machine' && <WashingMachineModel selected />}
+              {isPlacingItem.type === 'light' && <WallLightModel selected />}
+              {!['sink', 'bathtub', 'shower', 'toilet', 'towel_rail', 'washing_machine', 'light', 'plant'].includes(isPlacingItem.type) && (
+                <DynamicFurnitureModel item={isPlacingItem} selected={true} CustomFurniture={CustomFurniture} />
+              )}
+            </>
           )}
         </group>
       )}
@@ -4123,18 +4196,14 @@ function CameraController({ wizardStep, controlsRef }: { wizardStep: number; con
         setIsTransitioning(false);
       }
     } else if (wizardStep === 2) {
-      // Lock camera rotation to flat top-down looking straight down at the controls target
+      // Lock camera rotation to flat top-down looking straight down at origin (0, 0, 0)
       if (controlsRef.current) {
-        const tx = controlsRef.current.target.x;
-        const tz = controlsRef.current.target.z;
-        camera.position.x = tx;
-        camera.position.z = tz;
-        camera.lookAt(tx, 0, tz);
-      } else {
-        camera.position.x = 0;
-        camera.position.z = 0;
-        camera.lookAt(0, 0, 0);
+        controlsRef.current.target.set(0, 0, 0);
+        controlsRef.current.update();
       }
+      camera.position.x = 0;
+      camera.position.z = 0;
+      camera.lookAt(0, 0, 0);
     }
   });
 
@@ -4183,6 +4252,7 @@ function RoomPreview3D({
   measureTempEndPoint,
   setMeasureTempEndPoint,
   readOnly = false,
+  roomOffset = { x: 0, z: 0 },
 }: {
   shape: RoomShape;
   width: number;
@@ -4214,6 +4284,7 @@ function RoomPreview3D({
   measureTempEndPoint?: THREE.Vector3 | null;
   setMeasureTempEndPoint?: (p: THREE.Vector3 | null) => void;
   readOnly?: boolean;
+  roomOffset?: { x: number; z: number };
 }) {
   const ref = useRef<THREE.Group>(null);
   const { camera, gl } = useThree();
@@ -4536,7 +4607,7 @@ function RoomPreview3D({
   }, [isPlacingItem, setIsPlacingItem, draggingItemIdRef, placedItems, setPlacedItems, getFloorHit, onEndDrag]);
 
   return (
-    <group ref={ref}>
+    <group ref={ref} position={[roomOffset?.x || 0, 0, roomOffset?.z || 0]}>
       {/* Floor */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
@@ -4565,7 +4636,13 @@ function RoomPreview3D({
           }
           if (isPlacingItem) {
             e.stopPropagation();
-            recordHistory([...placedItems, isPlacingItem]);
+            const currentList = useDesignerStore.getState().placedItems;
+            const exists = currentList.some((i: any) => String(i.id) === String(isPlacingItem.id));
+            if (!exists) {
+              const next = [...currentList, isPlacingItem];
+              setPlacedItems(next);
+              recordHistory(next);
+            }
             setSelectedItemId(isPlacingItem.id);
             setIsPlacingItem(null);
           } else if (selectedRoomType === 'bathroom') {
@@ -5137,17 +5214,21 @@ function RoomPreview3D({
       {/* Placing-item ghost inside RoomPreview3D */}
       {isPlacingItem && (
         <group position={isPlacingItem.position} rotation={[0, isPlacingItem.rotation, 0]} scale={[0.3048, 0.3048, 0.3048]}>
-          {isPlacingItem.type === 'sink' && <SinkModel selected={true} />}
-          {isPlacingItem.type === 'bathtub' && <BathtubModel selected={true} />}
-          {isPlacingItem.type === 'shower' && <ShowerModel selected={true} />}
-          {isPlacingItem.type === 'toilet' && <ToiletModel selected={true} />}
-          {isPlacingItem.type === 'towel_rail' && <TowelRailModel selected={true} />}
-          {isPlacingItem.type === 'washing_machine' && <WashingMachineModel selected={true} />}
-          {isPlacingItem.type === 'light' && <WallLightModel selected={true} />}
-
-          {/* Dynamic Furniture Models (fallback to 2D image) */}
-          {!['sink', 'bathtub', 'shower', 'toilet', 'towel_rail', 'washing_machine', 'light', 'plant'].includes(isPlacingItem.type) && (
+          {isPlacingItem.model ? (
             <DynamicFurnitureModel item={isPlacingItem} selected={true} CustomFurniture={CustomFurniture} />
+          ) : (
+            <>
+              {isPlacingItem.type === 'sink' && <SinkModel selected={true} />}
+              {isPlacingItem.type === 'bathtub' && <BathtubModel selected={true} />}
+              {isPlacingItem.type === 'shower' && <ShowerModel selected={true} />}
+              {isPlacingItem.type === 'toilet' && <ToiletModel selected={true} />}
+              {isPlacingItem.type === 'towel_rail' && <TowelRailModel selected={true} />}
+              {isPlacingItem.type === 'washing_machine' && <WashingMachineModel selected={true} />}
+              {isPlacingItem.type === 'light' && <WallLightModel selected={true} />}
+              {!['sink', 'bathtub', 'shower', 'toilet', 'towel_rail', 'washing_machine', 'light', 'plant'].includes(isPlacingItem.type) && (
+                <DynamicFurnitureModel item={isPlacingItem} selected={true} CustomFurniture={CustomFurniture} />
+              )}
+            </>
           )}
         </group>
       )}
@@ -5494,6 +5575,11 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
   const [measureStartPoint, setMeasureStartPoint] = useState<THREE.Vector3 | null>(null);
   const [measureTempEndPoint, setMeasureTempEndPoint] = useState<THREE.Vector3 | null>(null);
   const [customiseFromWorkspace, setCustomiseFromWorkspace] = useState(false);
+  const [roomOffset, setRoomOffset] = useState<{ x: number; z: number }>({ x: 0, z: 0 });
+
+  useEffect(() => {
+    setRoomOffset({ x: 0, z: 0 });
+  }, [selectedShape, selectedRoomType]);
 
   const openCustomiseFromWorkspace = () => {
     const wCm = Math.round(state.widthFt * 30.48);
@@ -5527,6 +5613,19 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
     }, 200);
   };
 
+  // Auto-fetch catalog items on mount so tile pricing and summary calculations are available immediately
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+    fetch(`${apiUrl}/items`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          useDesignerStore.getState().setCatalogItems(data);
+        }
+      })
+      .catch(err => console.error("Auto-fetch catalog items error:", err));
+  }, []);
+
 
   useEffect(() => {
     if (!loadedDesignId) return;
@@ -5534,7 +5633,20 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
     const fetchSavedDesign = async () => {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
-        const response = await fetch(`${apiUrl}/designer/layout/${loadedDesignId}`, { cache: 'no-store' });
+        const [response, itemsResponse] = await Promise.all([
+          fetch(`${apiUrl}/designer/layout/${loadedDesignId}`, { cache: 'no-store' }),
+          fetch(`${apiUrl}/items`).catch(() => null)
+        ]);
+
+        let itemsData: any[] = [];
+        if (itemsResponse && itemsResponse.ok) {
+          const resJson = await itemsResponse.json();
+          if (Array.isArray(resJson)) {
+            itemsData = resJson;
+            useDesignerStore.getState().setCatalogItems(itemsData);
+          }
+        }
+
         if (!response.ok) throw new Error('Failed to load layout');
         const data = await response.json();
         remoteLog("LOADED DESIGN DATA:", data);
@@ -5604,7 +5716,11 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
           }))
         );
 
-        // Map placed items
+        // Map placed items with live catalog price resolution
+        const catalogList = (Array.isArray(itemsData) && itemsData.length > 0)
+          ? itemsData
+          : (useDesignerStore.getState().catalogItems || []);
+
         const mappedItems = (data.items || []).map((it: any) => {
           const type = it.type || 'sink';
           const name = it.name || '';
@@ -5612,15 +5728,29 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
           const isWallMounted = isBathtubItem ? false : (it.position && it.position[1] > 0.5);
           const posY = isBathtubItem ? 0 : (it.position ? it.position[1] : 0);
           const position = it.position ? [it.position[0], posY, it.position[2]] : [0, posY, 0];
+
+          // Cross-reference live catalog to get live OSPOS product price & details
+          const matchedCatalogItem = catalogList.find((ci: any) => {
+            if (ci.name && name && ci.name.toLowerCase().trim() === name.toLowerCase().trim()) return true;
+            if (ci.category && type && ci.category.toLowerCase().trim() === type.toLowerCase().trim()) return true;
+            if (ci.type && type && ci.type.toLowerCase().trim() === type.toLowerCase().trim()) return true;
+            return false;
+          });
+
+          const livePrice = matchedCatalogItem ? Number(matchedCatalogItem.price || matchedCatalogItem.cost || 0) : 0;
+          const rawCost = Number(it.cost !== undefined && it.cost !== null ? it.cost : (it.price !== undefined && it.price !== null ? it.price : 0));
+          const finalCost = livePrice > 0 ? livePrice : (rawCost > 0 && rawCost !== 250 ? rawCost : (matchedCatalogItem ? Number(matchedCatalogItem.price || 0) : 0));
+
           return {
-            id: it.id,
+            id: it.id || `${type}_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
             type,
-            name: it.name || (it.type ? (it.type.toUpperCase() + ' UNIT') : 'Unit'),
-            model: it.modelUrl,
-            cost: 250.00,
+            name: it.name || (matchedCatalogItem?.name) || (it.type ? (it.type.toUpperCase() + ' UNIT') : 'Unit'),
+            model: it.modelUrl || matchedCatalogItem?.glbUrl || matchedCatalogItem?.modelUrl,
+            cost: finalCost,
             position,
             rotation: (it.rotation && Array.isArray(it.rotation)) ? it.rotation[1] : (it.rotation_y || 0),
-            isWallMounted
+            isWallMounted,
+            scale: it.scale ? { x: Number(it.scale.x || 1), y: Number(it.scale.y || 1), z: Number(it.scale.z || 1) } : undefined
           };
         });
 
@@ -5923,38 +6053,36 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
     setWidthInput(nextW);
     setLengthInput(nextL);
     setHeightInput(nextH);
+    setRoomOffset({ x: 0, z: 0 });
 
     validateInputs(nextW, nextL, nextH, dimensionsUnit);
   };
 
   const handleVertexDrag = (idx: number, hitX: number, hitZ: number) => {
-    let w = Math.abs(hitX) * 2;
-    let d = Math.abs(hitZ) * 2;
-
-    // Snap to nearest 5 cm (0.05 meters) for clean increments and higher performance
-    w = Math.round(w / 0.05) * 0.05;
-    d = Math.round(d / 0.05) * 0.05;
-
-    w = Math.max(1.0, Math.min(10.0, w));
-    d = Math.max(1.0, Math.min(10.0, d));
+    let newW = Math.max(1.0, Math.min(10.0, Math.abs(hitX) * 2));
+    let newD = Math.max(1.0, Math.min(10.0, Math.abs(hitZ) * 2));
+    newW = Math.round(newW / 0.05) * 0.05;
+    newD = Math.round(newD / 0.05) * 0.05;
 
     if (selectedShape === 'square') {
-      const s = Math.max(w, d);
-      w = s;
-      d = s;
+      const s = Math.max(newW, newD);
+      newW = s;
+      newD = s;
     }
 
+    setRoomOffset({ x: 0, z: 0 });
+
     if (dimensionsUnit === 'cm') {
-      const wCm = Math.round(w * 100).toString();
-      const lCm = Math.round(d * 100).toString();
+      const wCm = Math.round(newW * 100).toString();
+      const lCm = Math.round(newD * 100).toString();
       if (wCm !== widthInput || lCm !== lengthInput) {
         setWidthInput(wCm);
         setLengthInput(lCm);
         validateInputs(wCm, lCm, heightInput, 'cm');
       }
     } else {
-      const wM = w.toFixed(1);
-      const lM = d.toFixed(1);
+      const wM = newW.toFixed(1);
+      const lM = newD.toFixed(1);
       if (wM !== widthInput || lM !== lengthInput) {
         setWidthInput(wM);
         setLengthInput(lM);
@@ -5964,100 +6092,36 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
   };
 
   const handleWallDrag = (idx: number, hitX: number, hitZ: number) => {
-    const wVal = widthInMeters;
-    const dVal = lengthInMeters;
-    let poly: [number, number][] = [];
+    let newW = widthInMeters;
+    let newD = lengthInMeters;
+
+    if (idx === 0 || idx === 2) {
+      newD = Math.max(1.0, Math.min(10.0, Math.abs(hitZ) * 2));
+      newD = Math.round(newD / 0.05) * 0.05;
+    } else {
+      newW = Math.max(1.0, Math.min(10.0, Math.abs(hitX) * 2));
+      newW = Math.round(newW / 0.05) * 0.05;
+    }
 
     if (selectedShape === 'square') {
-      const s = Math.min(wVal, dVal);
-      poly = [[-s / 2, -s / 2], [s / 2, -s / 2], [s / 2, s / 2], [-s / 2, s / 2]];
-    } else if (selectedShape === 'l-shape') {
-      poly = [
-        [-wVal / 2, -dVal / 2],
-        [0, -dVal / 2],
-        [0, 0],
-        [wVal / 2, 0],
-        [wVal / 2, dVal / 2],
-        [-wVal / 2, dVal / 2]
-      ];
-    } else if (selectedShape === 't-shape') {
-      poly = [
-        [-wVal / 4, -dVal / 2],
-        [wVal / 4, -dVal / 2],
-        [wVal / 4, 0],
-        [wVal / 2, 0],
-        [wVal / 2, dVal / 2],
-        [-wVal / 2, dVal / 2],
-        [-wVal / 2, 0],
-        [-wVal / 4, 0]
-      ];
-    } else if (selectedShape === 'u-shape') {
-      poly = [
-        [-wVal / 2, -dVal / 2],
-        [-wVal / 4, -dVal / 2],
-        [-wVal / 4, 0],
-        [wVal / 4, 0],
-        [wVal / 4, -dVal / 2],
-        [wVal / 2, -dVal / 2],
-        [wVal / 2, dVal / 2],
-        [-wVal / 2, dVal / 2]
-      ];
-    } else if (selectedShape === 'custom') {
-      poly = [
-        [-wVal / 2, -dVal / 2],
-        [wVal / 4, -dVal / 2],
-        [wVal / 2, -dVal / 4],
-        [wVal / 2, dVal / 2],
-        [-wVal / 2, dVal / 2]
-      ];
-    } else {
-      poly = [[-wVal / 2, -dVal / 2], [wVal / 2, -dVal / 2], [wVal / 2, dVal / 2], [-wVal / 2, dVal / 2]];
+      const s = Math.max(newW, newD);
+      newW = s;
+      newD = s;
     }
 
-    if (idx >= poly.length) return;
-    const p1 = poly[idx];
-    const p2 = poly[(idx + 1) % poly.length];
-    const dx = p2[0] - p1[0];
-    const dz = p2[1] - p1[1];
-    const len = Math.sqrt(dx * dx + dz * dz);
-    if (len === 0) return;
-
-    const normalX = dz / len;
-    const normalZ = -dx / len;
-
-    let w = wVal;
-    let d = dVal;
-
-    if (Math.abs(normalX) > Math.abs(normalZ)) {
-      w = Math.abs(hitX) * 2;
-    } else {
-      d = Math.abs(hitZ) * 2;
-    }
-
-    // Snap to nearest 5 cm (0.05 meters) for clean increments and higher performance
-    w = Math.round(w / 0.05) * 0.05;
-    d = Math.round(d / 0.05) * 0.05;
-
-    w = Math.max(1.0, Math.min(10.0, w));
-    d = Math.max(1.0, Math.min(10.0, d));
-
-    if (selectedShape === 'square') {
-      const s = Math.max(w, d);
-      w = s;
-      d = s;
-    }
+    setRoomOffset({ x: 0, z: 0 });
 
     if (dimensionsUnit === 'cm') {
-      const wCm = Math.round(w * 100).toString();
-      const lCm = Math.round(d * 100).toString();
+      const wCm = Math.round(newW * 100).toString();
+      const lCm = Math.round(newD * 100).toString();
       if (wCm !== widthInput || lCm !== lengthInput) {
         setWidthInput(wCm);
         setLengthInput(lCm);
         validateInputs(wCm, lCm, heightInput, 'cm');
       }
     } else {
-      const wM = w.toFixed(1);
-      const lM = d.toFixed(1);
+      const wM = newW.toFixed(1);
+      const lM = newD.toFixed(1);
       if (wM !== widthInput || lM !== lengthInput) {
         setWidthInput(wM);
         setLengthInput(lM);
@@ -6535,7 +6599,8 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
     if (opening) return { ...opening, isOpening: true };
     return null;
   }, [placedItems, state.wallOpenings, selectedItemId]);
-  const totalPrice = useMemo(() => placedItems.reduce((s, i) => s + i.cost, 0), [placedItems]);
+  const isBathroom = state.designType === 'bathroom' || selectedRoomType === 'bathroom';
+  const totalPrice = useMemo(() => isBathroom ? placedItems.reduce((s, i) => s + i.cost, 0) : 0, [placedItems, isBathroom]);
 
   const handleAddItem = (type: string) => {
     const catalogToUse = catalog;
@@ -6557,7 +6622,13 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
 
   const confirmPlacement = () => {
     if (!isPlacingItem) return;
-    recordHistory([...placedItems, isPlacingItem]);
+    const currentList = useDesignerStore.getState().placedItems;
+    const exists = currentList.some((i: any) => String(i.id) === String(isPlacingItem.id));
+    if (!exists) {
+      const next = [...currentList, isPlacingItem];
+      setPlacedItems(next);
+      recordHistory(next);
+    }
     setSelectedItemId(isPlacingItem.id);
     setIsPlacingItem(null);
   };
@@ -7020,7 +7091,13 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
                         <button
                           onClick={() => {
                             if (!isPlacingItem) return;
-                            recordHistory([...placedItems, isPlacingItem]);
+                            const currentList = useDesignerStore.getState().placedItems;
+                            const exists = currentList.some((i: any) => String(i.id) === String(isPlacingItem.id));
+                            if (!exists) {
+                              const next = [...currentList, isPlacingItem];
+                              setPlacedItems(next);
+                              recordHistory(next);
+                            }
                             setSelectedItemId(isPlacingItem.id);
                             setIsPlacingItem(null);
                           }}
@@ -7079,9 +7156,10 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
                       <>
                         <button
                           onClick={() => setWizardCategory(null)}
-                          className="text-[10px] font-bold text-gray-400 hover:text-black uppercase flex items-center gap-1 mb-4"
+                          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-black text-white hover:bg-gray-800 font-extrabold text-[10px] tracking-wider uppercase transition-all shadow-sm mb-4 cursor-pointer active:scale-95"
                         >
-                          ← Back to Categories
+                          <ArrowLeft size={13} />
+                          <span>Back to Categories</span>
                         </button>
                         <div className="space-y-2">
                           <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase block">Doors</span>
@@ -7153,9 +7231,10 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
                       <>
                         <button
                           onClick={() => setWizardCategory(null)}
-                          className="text-[10px] font-bold text-gray-400 hover:text-black uppercase flex items-center gap-1 mb-4"
+                          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-black text-white hover:bg-gray-800 font-extrabold text-[10px] tracking-wider uppercase transition-all shadow-sm mb-4 cursor-pointer active:scale-95"
                         >
-                          ← Back to Categories
+                          <ArrowLeft size={13} />
+                          <span>Back to Categories</span>
                         </button>
 
                         {isWizardLoading ? (
@@ -7382,6 +7461,7 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
                     setMeasureStartPoint={setMeasureStartPoint}
                     measureTempEndPoint={measureTempEndPoint}
                     setMeasureTempEndPoint={setMeasureTempEndPoint}
+                    roomOffset={roomOffset}
                   />
                   <OrbitControls ref={wizardControlsRef} enabled={orbitEnabled} enableRotate={wizardStep !== 2} enableDamping dampingFactor={0.05} maxPolarAngle={Math.PI / 2.1} />
                 </Suspense>
@@ -7716,7 +7796,13 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
               {alertMessage}
             </p>
             <button
-              onClick={hideAlert}
+              onClick={() => {
+                const shouldReload = alertMessage?.includes("saved");
+                hideAlert();
+                if (shouldReload) {
+                  window.location.reload();
+                }
+              }}
               className="mt-6 w-full py-3 bg-[#1A1A1A] hover:bg-[#333] text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95"
             >
               Close
