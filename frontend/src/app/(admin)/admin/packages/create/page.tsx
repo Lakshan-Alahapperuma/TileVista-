@@ -83,8 +83,12 @@ export default function AdminCreatePackagePage() {
   const wallTextureUrl = useDesignerStore(s => s.state?.wallTextureUrl);
   const activeCategory = useDesignerStore(s => s.activeCategory);
 
-  // Fetch full OSPOS catalog items
+  // Fetch full OSPOS catalog items & initialize 3D workspace directly
   useEffect(() => {
+    const store = useDesignerStore.getState();
+    store.setWizardStep(5);
+    store.setSelectedShape('rectangular');
+
     const fetchCatalog = async () => {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
@@ -182,15 +186,6 @@ export default function AdminCreatePackagePage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4 font-sans">
-        <Loader2 className="w-8 h-8 animate-spin text-[#D4C5B9]" />
-        <p className="text-sm text-gray-500 font-light">Loading 3D Suite Builder...</p>
-      </div>
-    );
-  }
-
   // Group placed 3D items by product name with live quantities & total costs
   const groupedActiveItems = React.useMemo(() => {
     const map = new Map<string, { name: string; type: string; count: number; totalCost: number }>();
@@ -214,6 +209,15 @@ export default function AdminCreatePackagePage() {
   }, [placedItems]);
 
   const totalUniqueItemsCount = groupedActiveItems.length;
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4 font-sans">
+        <Loader2 className="w-8 h-8 animate-spin text-[#D4C5B9]" />
+        <p className="text-sm text-gray-500 font-light">Loading 3D Suite Builder...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 font-sans max-w-[1700px] mx-auto pb-10">
