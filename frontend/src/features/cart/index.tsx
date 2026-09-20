@@ -16,10 +16,11 @@ export const CartFeature: React.FC = () => {
   const router = useRouter();
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
 
   const handlePlaceOrder = () => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push('/login?redirect=/cart');
     } else {
       router.push('/checkout');
     }
@@ -204,25 +205,49 @@ export const CartFeature: React.FC = () => {
               </div>
             </div>
 
-            <div className="group relative mt-8">
+            <div className="mt-8">
               <button
-                onClick={handlePlaceOrder}
+                onClick={() => setShowPolicyModal(true)}
                 className="w-full bg-[#1A1A1A] hover:bg-[#D4C5B9] text-white hover:text-[#1A1A1A] py-4 text-xs font-bold tracking-widest uppercase transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed rounded-none"
                 disabled={items.length === 0}
               >
                 <span>Place Order</span>
               </button>
-
-              {/* Showroom Pickup Policy Callout */}
-              <div className="absolute top-full left-0 right-0 mt-2 p-4 bg-[#FDFBF7] border border-[#D4C5B9]/60 text-xs text-[#8C7A6B] space-y-2 leading-relaxed hidden group-hover:block z-10 shadow-lg">
-                <p className="font-semibold text-[#1A1A1A]">Showroom Pickup Policy</p>
-                <p>No online payment is required. You can complete your order and reserve your items here.</p>
-                <p className="font-medium text-red-600">Note: Reserved items must be collected from our showroom within 3 days, or the reservation will automatically expire.</p>
-              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {showPolicyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowPolicyModal(false)}>
+          <div className="bg-white p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-[#1A1A1A] mb-4 border-b border-gray-100 pb-3">Showroom Pickup Policy</h3>
+            <div className="text-sm text-gray-600 space-y-4 mb-8">
+              <p className="leading-relaxed">No online payment is required. You can complete your order and reserve your items here.</p>
+              <div className="bg-red-50 p-4 border-l-4 border-red-500 rounded-r-md">
+                <p className="font-medium text-red-700">Note: Reserved items must be collected from our showroom within 5 days, or the reservation will automatically expire.</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+              <button
+                onClick={() => setShowPolicyModal(false)}
+                className="px-5 py-2.5 text-xs font-bold tracking-widest uppercase text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowPolicyModal(false);
+                  handlePlaceOrder();
+                }}
+                className="px-6 py-2.5 text-xs font-bold tracking-widest uppercase text-white bg-[#1A1A1A] hover:bg-[#D4C5B9] hover:text-[#1A1A1A] transition-colors"
+              >
+                Continue to Order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showClearConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowClearConfirm(false)}>

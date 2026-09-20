@@ -10,27 +10,160 @@ export class CartService {
     private readonly prisma: PrismaService,
   ) {}
 
-  private async getOrCreateCart(sessionId: string) {
-    let cart = await this.prisma.carts.findUnique({
-      where: { session_id: sessionId },
+  private async mergeGuestCartIfNeeded(sessionId: string, userId: string) {
+    if (!sessionId || !userId) return;
+
+    const guestCart = await this.prisma.carts.findFirst({
+      where: { session_id: sessionId, user_id: null, status: 'active' },
+      include: { cart_items: true },
     });
 
-    if (!cart) {
-      cart = await this.prisma.carts.create({
+    // Only merge if active guest cart exists with user_id == null and contains items
+    if (!guestCart || guestCart.cart_items.length === 0) {
+      return;
+    }
+
+    const userCart = await this.prisma.carts.findFirst({
+      where: { user_id: userId, status: 'active' },
+      include: { cart_items: true },
+      orderBy: { updated_at: 'desc' },
+    });
+
+    // Scenario A: Customer has NO active user cart -> convert guest cart to user cart & clear session_id
+    if (!userCart) {
+      await this.prisma.carts.update({
+        where: { cart_id: guestCart.cart_id },
+        data: { user_id: userId, session_id: null, status: 'active' },
+      });
+      return;
+    }
+
+    // Scenario B: Customer ALREADY has an active user cart -> merge guest items into user cart
+    const allOsposItems = await this.osposService.fetchAllItems();
+    const osposItemMap = new Map(allOsposItems.map((i) => [i.item_id, i]));
+
+    const osposItemIds = [...new Set([
+      ...guestCart.cart_items.map((i) => i.ospos_item_id),
+      ...userCart.cart_items.map((i) => i.ospos_item_id),
+    ])];
+
+    const activeReservations = await this.prisma.inventory_reservations.findMany({
+      where: {
+        ospos_item_id: { in: osposItemIds },
+        status: 'active',
+        expires_at: { gte: new Date() },
+      },
+    });
+
+    const reservedMap = new Map<number, number>();
+    for (const res of activeReservations) {
+      reservedMap.set(res.ospos_item_id, (reservedMap.get(res.ospos_item_id) || 0) + res.quantity);
+    }
+
+    for (const guestItem of guestCart.cart_items) {
+      const osposItem = osposItemMap.get(guestItem.ospos_item_id);
+      const physicalStock = osposItem ? osposItem.quantity : 0;
+      const reservedQty = reservedMap.get(guestItem.ospos_item_id) || 0;
+      const effectiveAvailable = Math.max(0, physicalStock - reservedQty);
+
+      const existingUserItem = userCart.cart_items.find(
+        (ui) => ui.ospos_item_id === guestItem.ospos_item_id
+      );
+
+      const currentQty = existingUserItem ? existingUserItem.quantity : 0;
+      const desiredQty = currentQty + guestItem.quantity;
+      const finalQty = Math.min(desiredQty, effectiveAvailable);
+
+      if (existingUserItem) {
+        if (finalQty > 0) {
+          await this.prisma.cart_items.update({
+            where: { cart_item_id: existingUserItem.cart_item_id },
+            data: { quantity: finalQty },
+          });
+        }
+      } else {
+        if (finalQty > 0) {
+          await this.prisma.cart_items.create({
+            data: {
+              cart_item_id: uuidv4(),
+              cart_id: userCart.cart_id,
+              ospos_item_id: guestItem.ospos_item_id,
+              quantity: finalQty,
+              unit_price_snapshot: guestItem.unit_price_snapshot,
+            },
+          });
+        }
+      }
+    }
+
+    // Mark guest cart as converted and detach guest session_id
+    await this.prisma.carts.update({
+      where: { cart_id: guestCart.cart_id },
+      data: { status: 'converted', session_id: null },
+    });
+  }
+
+  private async getOrCreateCart(sessionId: string, userId?: string) {
+    if (userId) {
+      if (sessionId) {
+        await this.mergeGuestCartIfNeeded(sessionId, userId);
+      }
+
+      let userCart = await this.prisma.carts.findFirst({
+        where: { user_id: userId, status: 'active' },
+        orderBy: { updated_at: 'desc' },
+      });
+
+      if (!userCart) {
+        userCart = await this.prisma.carts.create({
+          data: {
+            cart_id: uuidv4(),
+            user_id: userId,
+            session_id: null,
+            status: 'active',
+          },
+        });
+      }
+      return userCart;
+    }
+
+    // Unauthenticated guest flow — strictly requires user_id: null
+    let guestCart = await this.prisma.carts.findFirst({
+      where: { session_id: sessionId, user_id: null, status: 'active' },
+    });
+
+    if (!guestCart) {
+      guestCart = await this.prisma.carts.create({
         data: {
           cart_id: uuidv4(),
           session_id: sessionId,
+          user_id: null,
+          status: 'active',
         },
       });
     }
-    return cart;
+    return guestCart;
   }
 
-  async getCart(sessionId: string) {
-    const cart = await this.prisma.carts.findUnique({
-      where: { session_id: sessionId },
-      include: { cart_items: true },
-    });
+  async getCart(sessionId: string, userId?: string) {
+    if (userId && sessionId) {
+      await this.mergeGuestCartIfNeeded(sessionId, userId);
+    }
+
+    let cart = null;
+    if (userId) {
+      cart = await this.prisma.carts.findFirst({
+        where: { user_id: userId, status: 'active' },
+        include: { cart_items: true },
+        orderBy: { updated_at: 'desc' },
+      });
+    } else if (sessionId) {
+      // Unauthenticated guest lookup: MUST NOT return customer-owned cart
+      cart = await this.prisma.carts.findFirst({
+        where: { session_id: sessionId, user_id: null, status: 'active' },
+        include: { cart_items: true },
+      });
+    }
 
     const items = cart?.cart_items || [];
     if (items.length === 0) return [];
@@ -80,7 +213,7 @@ export class CartService {
       .filter(Boolean);
   }
 
-  async addToCart(sessionId: string, osposItemId: number, quantity: number) {
+  async addToCart(sessionId: string, osposItemId: number, quantity: number, userId?: string) {
     const allItems = await this.osposService.fetchAllItems();
     const osposItem = allItems.find((i) => i.item_id === osposItemId);
 
@@ -99,7 +232,7 @@ export class CartService {
       throw new BadRequestException(`Item not available.`);
     }
 
-    const cart = await this.getOrCreateCart(sessionId);
+    const cart = await this.getOrCreateCart(sessionId, userId);
 
     const existingItem = await this.prisma.cart_items.findFirst({
       where: { cart_id: cart.cart_id, ospos_item_id: osposItemId },
@@ -143,19 +276,15 @@ export class CartService {
       });
     }
 
-    return this.getCart(sessionId);
+    return this.getCart(sessionId, userId);
   }
 
-  async updateQuantity(sessionId: string, osposItemId: number, quantity: number) {
+  async updateQuantity(sessionId: string, osposItemId: number, quantity: number, userId?: string) {
     if (quantity < 1) {
-      return this.removeFromCart(sessionId, osposItemId);
+      return this.removeFromCart(sessionId, osposItemId, userId);
     }
 
-    const cart = await this.prisma.carts.findUnique({
-      where: { session_id: sessionId },
-    });
-    
-    if (!cart) throw new BadRequestException('Cart not found');
+    const cart = await this.getOrCreateCart(sessionId, userId);
 
     const existingItem = await this.prisma.cart_items.findFirst({
       where: { cart_id: cart.cart_id, ospos_item_id: osposItemId },
@@ -179,15 +308,11 @@ export class CartService {
       data: { quantity },
     });
 
-    return this.getCart(sessionId);
+    return this.getCart(sessionId, userId);
   }
 
-  async removeFromCart(sessionId: string, osposItemId: number) {
-    const cart = await this.prisma.carts.findUnique({
-      where: { session_id: sessionId },
-    });
-    
-    if (!cart) return this.getCart(sessionId);
+  async removeFromCart(sessionId: string, osposItemId: number, userId?: string) {
+    const cart = await this.getOrCreateCart(sessionId, userId);
 
     const existingItem = await this.prisma.cart_items.findFirst({
       where: { cart_id: cart.cart_id, ospos_item_id: osposItemId },
@@ -199,14 +324,22 @@ export class CartService {
       });
     }
 
-    return this.getCart(sessionId);
+    return this.getCart(sessionId, userId);
   }
 
-  async clearCart(sessionId: string) {
-    const cart = await this.prisma.carts.findUnique({
-      where: { session_id: sessionId },
-    });
-    
+  async clearCart(sessionId: string, userId?: string) {
+    let cart = null;
+    if (userId) {
+      cart = await this.prisma.carts.findFirst({
+        where: { user_id: userId, status: 'active' },
+        orderBy: { updated_at: 'desc' },
+      });
+    } else if (sessionId) {
+      cart = await this.prisma.carts.findFirst({
+        where: { session_id: sessionId, user_id: null, status: 'active' },
+      });
+    }
+
     if (cart) {
       await this.prisma.cart_items.deleteMany({
         where: { cart_id: cart.cart_id },
@@ -214,3 +347,5 @@ export class CartService {
     }
   }
 }
+
+
