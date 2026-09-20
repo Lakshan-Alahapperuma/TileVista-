@@ -19,6 +19,7 @@ import {
   MapPin,
   Bell,
   X,
+  Menu,
   PackagePlus,
   MessageSquare,
 } from 'lucide-react';
@@ -45,6 +46,12 @@ export default function AdminLayout({
   const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
   const [unreadAdminCount, setUnreadAdminCount] = useState<number>(0);
   const [showNotificationDropdown, setShowNotificationDropdown] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
 
   // Initialize seen orders count from localStorage on mount
   useEffect(() => {
@@ -193,7 +200,7 @@ export default function AdminLayout({
     : Math.max(0, ordersApprovalCount - seenOrdersCount);
 
   const sidebarLinks = [
-    { name: 'Dashboard', href: '/admin/dashboard', icon: <LayoutDashboard size={16} /> },
+
     { name: 'Orders', href: '/admin/orders', icon: <Receipt size={16} />, badge: unreadOrdersCount },
     { name: 'Products & Assets', href: '/admin/items', icon: <Grid3X3 size={16} /> },
     { name: 'Inventory & Alerts', href: '/admin/inventory', icon: <Warehouse size={16} />, alert: showNewItemPulse },
@@ -208,8 +215,31 @@ export default function AdminLayout({
     <AdminGuard>
       <div className="flex h-screen bg-[#F9F9F7] text-[#1A1A1A] font-sans overflow-hidden selection:bg-[#D4C5B9] selection:text-[#1A1A1A]">
         
+        {/* Mobile Sidebar Overlay */}
+        {isMobileMenuOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-label="Close mobile menu"
+          />
+        )}
+
         {/* 1. Admin Sidebar (Matte Off-Black) */}
-        <aside className="hidden md:flex flex-col w-64 bg-[#1A1A1A] text-white border-r border-gray-800 shrink-0">
+        <aside 
+          className={`
+            fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-[#1A1A1A] text-white border-r border-gray-800 shrink-0 
+            transition-transform duration-300 ease-in-out md:static md:translate-x-0
+            ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+          `}
+        >
+          {/* Mobile Close Button */}
+          <button 
+            className="absolute top-4 right-4 p-2 text-gray-400 hover:text-white md:hidden transition-colors"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            <X size={20} />
+          </button>
           
           {/* Logo Branding */}
           <div className="h-16 flex items-center gap-3 px-6 border-b border-gray-850">
@@ -293,12 +323,19 @@ export default function AdminLayout({
         <div className="flex-1 flex flex-col overflow-hidden">
 
           {/* Top Admin Header Bar */}
-          <header className="h-14 bg-white border-b border-gray-200 px-8 flex items-center justify-between shrink-0 font-sans">
+          <header className="h-14 bg-white border-b border-gray-200 px-4 md:px-8 flex items-center justify-between shrink-0 font-sans">
             <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider">
-                Alahapperuma Trade Center
+              <button 
+                className="p-2 -ml-2 text-gray-700 hover:text-[#1A1A1A] hover:bg-gray-200 rounded-full md:hidden transition-colors"
+                onClick={() => setIsMobileMenuOpen(true)}
+                aria-label="Open mobile menu"
+              >
+                <Menu size={20} />
+              </button>
+              <span className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider truncate max-w-[150px] sm:max-w-none">
+                Alahapperuma <span className="hidden sm:inline">Trade Center</span>
               </span>
-              <span className="text-[10px] text-gray-400 font-light border-l border-gray-200 pl-3">
+              <span className="hidden md:inline-block text-[10px] text-gray-400 font-light border-l border-gray-200 pl-3">
                 Showroom OS Management Dashboard
               </span>
             </div>

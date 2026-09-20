@@ -11,6 +11,7 @@ export class PackageRepository {
   async findAll(includeInactive = false) {
     return this.prisma.packages.findMany({
       where: includeInactive ? undefined : { status: 'active' },
+      orderBy: { created_at: 'desc' },
       include: {
         package_items: {
           include: {

@@ -110,7 +110,7 @@ export const CustomerDashboard: React.FC = () => {
       }
       const userRole = (user?.role || '').toUpperCase();
       if (userRole === 'ADMIN' || userRole === 'ADMINISTRATOR') {
-        router.push('/admin/dashboard');
+        router.push('/admin/orders');
       }
     }
   }, [authLoading, isAuthenticated, user, router]);

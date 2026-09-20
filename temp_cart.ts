@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+﻿import { Injectable, BadRequestException } from '@nestjs/common';
 import { OsposIntegrationService } from '../integrations/ospos/ospos.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { v4 as uuidv4 } from 'uuid';
@@ -127,7 +127,7 @@ export class CartService {
       return userCart;
     }
 
-    // Unauthenticated guest flow — strictly requires user_id: null
+    // Unauthenticated guest flow ΓÇö strictly requires user_id: null
     let guestCart = await this.prisma.carts.findFirst({
       where: { session_id: sessionId, user_id: null, status: 'active' },
     });

@@ -29,7 +29,7 @@ export default function AdminEditPackagePage({ params }: PageProps) {
   const router = useRouter();
   const { packageId } = params;
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // Package fields
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -82,7 +82,7 @@ export default function AdminEditPackagePage({ params }: PageProps) {
       setCapturingSnapshot(false);
     }
   };
-  
+
   // Catalog & Status
   const [catalogItems, setCatalogItems] = useState<UnifiedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,7 +93,7 @@ export default function AdminEditPackagePage({ params }: PageProps) {
     const fetchData = async () => {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
-        
+
         // 1. Fetch full catalog
         const catalogRes = await fetch(`${apiUrl}/items?includeHidden=true`);
         if (!catalogRes.ok) throw new Error('Failed to fetch items catalog');
@@ -257,11 +257,11 @@ export default function AdminEditPackagePage({ params }: PageProps) {
 
   // Compute live financials from 3D room contents
   const placedItemsTotal = (placedItems || []).reduce((sum, item) => sum + (item.cost || (item as any).price || 150), 0);
-  
+
   // Find tile item costs from catalog matching active floor/wall texture URLs
   const floorTileItem = catalogItems.find(i => i.imageUrl && floorTextureUrl && floorTextureUrl.includes(i.imageUrl));
   const wallTileItem = catalogItems.find(i => i.imageUrl && wallTextureUrl && wallTextureUrl.includes(i.imageUrl));
-  
+
   const rawTotal = placedItemsTotal;
   const activeDiscount = Math.min(100, Math.max(0, discountPercent || 0));
   const discountSavings = rawTotal * (activeDiscount / 100);
@@ -270,7 +270,7 @@ export default function AdminEditPackagePage({ params }: PageProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return showAlert('Please enter a package name');
-    
+
     // Map placed items & tiles into package items list
     const itemQuantityMap: Record<string, number> = {};
 
@@ -373,7 +373,7 @@ export default function AdminEditPackagePage({ params }: PageProps) {
       {/* Header Bar */}
       <div className="flex items-center justify-between border-b border-gray-150 pb-4">
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={() => router.push('/admin/packages')}
             className="p-2 border border-gray-250 hover:bg-gray-50 rounded transition-colors"
           >
@@ -400,8 +400,13 @@ export default function AdminEditPackagePage({ params }: PageProps) {
         </div>
       )}
 
+
+
+
+
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
+
         {/* LEFT COLUMN: Metadata & Real-time Financial Calculator (4 / 12 Width, auto-hides when item panel is open) */}
         {!activeCategory && (
           <div className="lg:col-span-4 space-y-5 transition-all duration-300">
@@ -410,11 +415,11 @@ export default function AdminEditPackagePage({ params }: PageProps) {
               <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider border-b border-gray-100 pb-3">
                 Suite Metadata
               </h3>
-              
+
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block">Package Name</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={name}
                   onChange={e => setName(e.target.value)}
                   className="w-full bg-white text-gray-900 border border-gray-300 focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] outline-none text-xs p-2.5 rounded-md transition-colors font-sans shadow-sm"
@@ -425,7 +430,7 @@ export default function AdminEditPackagePage({ params }: PageProps) {
 
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block">Description</label>
-                <textarea 
+                <textarea
                   value={description}
                   onChange={e => setDescription(e.target.value)}
                   rows={3}
@@ -436,8 +441,8 @@ export default function AdminEditPackagePage({ params }: PageProps) {
 
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block">Discount Percentage (%)</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   value={discountPercent}
                   onChange={e => setDiscountPercent(Math.max(0, Number(e.target.value)))}
                   className="w-full bg-white text-gray-900 border border-gray-300 focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] outline-none text-xs p-2.5 rounded-md transition-colors font-mono font-semibold shadow-sm"
@@ -447,21 +452,27 @@ export default function AdminEditPackagePage({ params }: PageProps) {
                 />
               </div>
 
+
+
               {/* Cover Image Upload & Live Preview */}
+
+
+
+
               <div className="space-y-2 pt-1 border-t border-gray-100">
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block">Suite Cover Image</label>
-                
+
                 {/* Preview Box */}
                 <div className="relative w-full h-36 bg-gray-50 border border-gray-300 rounded-lg overflow-hidden flex flex-col items-center justify-center group shadow-inner">
                   {coverImage ? (
                     <>
-                      <img 
+                      <img
                         src={
-                          coverImage.startsWith('/uploads') 
+                          coverImage.startsWith('/uploads')
                             ? `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:4000'}${coverImage}`
                             : coverImage
-                        } 
-                        alt="Cover Preview" 
+                        }
+                        alt="Cover Preview"
                         className="w-full h-full object-cover"
                         onError={(e) => {
                           (e.target as HTMLElement).style.display = 'none';
@@ -493,11 +504,11 @@ export default function AdminEditPackagePage({ params }: PageProps) {
                   )}
                 </div>
 
-                <input 
-                  type="file" 
+                <input
+                  type="file"
                   ref={fileInputRef}
-                  accept="image/*" 
-                  className="hidden" 
+                  accept="image/*"
+                  className="hidden"
                   onChange={handleImageUpload}
                 />
 
@@ -525,8 +536,8 @@ export default function AdminEditPackagePage({ params }: PageProps) {
 
                 <div className="space-y-1 pt-1">
                   <span className="text-[9px] font-semibold text-gray-400 block uppercase">Or Image Route URL</span>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={coverImage}
                     onChange={e => setCoverImage(e.target.value)}
                     className="w-full bg-white text-gray-900 border border-gray-300 focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] outline-none text-xs p-2 rounded-md transition-colors font-mono shadow-sm"
@@ -536,7 +547,12 @@ export default function AdminEditPackagePage({ params }: PageProps) {
               </div>
             </div>
 
+
+
             {/* Real-Time Financial Price Summary Card */}
+
+
+
             <div className="bg-[#1A1A1A] text-white border border-gray-800 shadow-md rounded-xl p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-gray-800 pb-3">
                 <span className="text-[10px] font-bold tracking-widest text-[#D4C5B9] uppercase">Price Summary</span>
@@ -575,7 +591,7 @@ export default function AdminEditPackagePage({ params }: PageProps) {
                 </div>
               </div>
 
-              <button 
+              <button
                 type="button"
                 onClick={handleSubmit}
                 disabled={saving}
@@ -589,7 +605,14 @@ export default function AdminEditPackagePage({ params }: PageProps) {
           </div>
         )}
 
+
+
+
         {/* RIGHT COLUMN: Full Interactive 3D Room Suite Designer Canvas & Side Menu */}
+
+
+
+
         <div className={`${activeCategory ? 'lg:col-span-12' : 'lg:col-span-8'} bg-white border border-gray-200 shadow-sm rounded-xl p-4 space-y-3 sticky top-4 transition-all duration-300`}>
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <div className="flex items-center gap-2">

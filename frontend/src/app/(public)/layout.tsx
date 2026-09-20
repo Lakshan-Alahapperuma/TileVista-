@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ShoppingCart, RefreshCw, Phone, Mail, MapPin, User, Bell, Check, ChevronDown, Calendar, Package } from 'lucide-react';
+import { ShoppingCart, RefreshCw, Phone, Mail, MapPin, User, Bell, Check, ChevronDown, Calendar, Package, Menu, X } from 'lucide-react';
 import { useAuth } from '../../features/auth/AuthContext';
 import { MegaMenuDropdown } from '../../components/shared/MegaMenuDropdown';
 import { useCart } from '../../features/cart/hooks/useCart';
@@ -25,6 +25,11 @@ export default function PublicLayout({
   const [unreadNotificationCount, setUnreadNotificationCount] = React.useState<number>(0);
   const [showNotificationDropdown, setShowNotificationDropdown] = React.useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = React.useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
 
   const fetchNotifications = React.useCallback(async () => {
     if (!isAuthenticated) return;
@@ -371,10 +376,65 @@ export default function PublicLayout({
                 <User size={16} className="text-gray-500" />
               </Link>
             )}
+
+            {/* Mobile Hamburger Menu Toggle */}
+            <button 
+              className="p-2 -mr-2 text-gray-700 hover:text-[#1A1A1A] hover:bg-gray-100 rounded-full md:hidden transition-colors"
+              onClick={() => setIsMobileMenuOpen(true)}
+              aria-label="Open mobile menu"
+            >
+              <Menu size={20} />
+            </button>
           </div>
         </div>
 
       </header>
+
+      {/* Mobile Sidebar Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300"
+          onClick={() => setIsMobileMenuOpen(false)}
+          aria-label="Close mobile menu"
+        />
+      )}
+
+      {/* Mobile Drawer (Right Side) */}
+      <aside 
+        className={`
+          fixed inset-y-0 right-0 z-50 flex flex-col w-64 bg-white text-[#1A1A1A] shadow-2xl shrink-0 
+          transition-transform duration-300 ease-in-out md:hidden
+          ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'}
+        `}
+      >
+        <div className="h-16 flex items-center justify-between px-6 border-b border-gray-100">
+          <span className="font-bold text-[12px] tracking-[0.15em] uppercase">Navigation</span>
+          <button 
+            className="p-2 -mr-2 text-gray-400 hover:text-[#1A1A1A] transition-colors"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        
+        <nav className="flex-1 px-6 py-6 space-y-4 overflow-y-auto">
+          {navigation.map((item) => {
+            const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`block text-xs font-semibold tracking-widest uppercase transition-all ${
+                  active ? 'text-[#1A1A1A]' : 'text-gray-500 hover:text-[#1A1A1A]'
+                }`}
+              >
+                {item.name}
+              </Link>
+            );
+          })}
+        </nav>
+      </aside>
 
       {/* 3. Render Viewport Page Content */}
       <main className="flex-grow w-full">

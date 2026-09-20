@@ -110,7 +110,7 @@ export default function ModelGeneratorDashboard() {
         <header className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10 border-b border-slate-850 pb-6">
           <div className="flex items-center gap-4">
             <Link 
-              href="/admin/dashboard" 
+              href="/admin/orders"
               className="w-10 h-10 rounded-full border border-slate-800 bg-slate-900/60 hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-all"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -124,7 +124,7 @@ export default function ModelGeneratorDashboard() {
             </div>
           </div>
           <Link 
-            href="/admin/dashboard"
+            href="/admin/orders"
             className="text-xs font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 border border-indigo-500/20 hover:border-indigo-500/50 bg-indigo-500/5 px-4 py-2 rounded-xl transition-all"
           >
             Showroom Control Panel

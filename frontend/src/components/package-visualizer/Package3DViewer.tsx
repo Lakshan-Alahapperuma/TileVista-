@@ -14,7 +14,24 @@ interface Package3DViewerProps {
 
 export const Package3DViewer: React.FC<Package3DViewerProps> = ({ readOnly = false, pkg }) => {
   React.useEffect(() => {
-    if (!pkg) return;
+    const store = useDesignerStore.getState();
+    store.setWizardStep(5);
+    store.setSelectedShape('rectangular');
+
+    if (!pkg) {
+      if (!store.state?.widthFt) {
+        store.setState({
+          widthFt: 12.0,
+          depthFt: 9.0,
+          heightFt: 8.5,
+          shape: 'rectangular',
+          unit: 'cm',
+          floorColor: '#ffffff',
+          designType: 'bathroom',
+        });
+      }
+      return;
+    }
 
     const STATIC_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api').replace('/api', '');
 
@@ -26,7 +43,6 @@ export const Package3DViewer: React.FC<Package3DViewerProps> = ({ readOnly = fal
 
     if (pkg.designData) {
       const dd = pkg.designData;
-      const store = useDesignerStore.getState();
       store.setWizardStep(5);
       store.setState({
         widthFt: dd.widthFt || 12.0,
@@ -130,7 +146,6 @@ export const Package3DViewer: React.FC<Package3DViewerProps> = ({ readOnly = fal
       textureUrl: wallTexUrl || undefined,
     }));
 
-    const store = useDesignerStore.getState();
     store.setWizardStep(5);
     store.setState({
       widthFt: 12.0,

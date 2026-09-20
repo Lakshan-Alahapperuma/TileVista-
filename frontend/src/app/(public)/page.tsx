@@ -14,10 +14,6 @@ import { ExperienceCenter } from '../../components/landing/ExperienceCenter';
 export default function Home() {
   const router = useRouter();
 
-  const handleAddToCartPackage = (pkgId: string) => {
-    alert(`Package additions will be enabled in the next sprint.`);
-  };
-
   return (
     <main>
       {/* Hero Widescreen Banner */}
@@ -37,7 +33,6 @@ export default function Home() {
       {/* Curated Suite Packages */}
       <CuratedPackages 
         onVisualizePackage={(pkgId) => router.push(`/designer?package=${pkgId}`)} 
-        onAddToCart={handleAddToCartPackage} 
       />
 
       {/* 3D Blueprint CAD Workspace highlight */}

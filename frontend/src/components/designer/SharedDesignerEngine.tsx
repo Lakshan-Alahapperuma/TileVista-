@@ -4808,7 +4808,7 @@ function RoomPreview3D({
                 if (e.nativeEvent?.target && 'setPointerCapture' in (e.nativeEvent.target as any)) {
                   (e.nativeEvent.target as any).setPointerCapture(e.pointerId);
                 }
-              } catch (_) {}
+              } catch (_) { }
               setDraggingOpeningId(opening.id);
               onStartDrag();
             }}
@@ -4859,7 +4859,7 @@ function RoomPreview3D({
                   if (e.target && 'releasePointerCapture' in (e.target as any)) {
                     (e.target as any).releasePointerCapture(e.pointerId);
                   }
-                } catch (_) {}
+                } catch (_) { }
                 setDraggingOpeningId(null);
                 onEndDrag();
               }
@@ -4890,7 +4890,7 @@ function RoomPreview3D({
                         if (e.target && 'setPointerCapture' in (e.target as any)) {
                           (e.target as any).setPointerCapture(e.pointerId);
                         }
-                      } catch (_) {}
+                      } catch (_) { }
                       setDraggingOpeningId(opening.id);
                       onStartDrag();
                     }}
@@ -4941,7 +4941,7 @@ function RoomPreview3D({
                           if (e.target && 'releasePointerCapture' in (e.target as any)) {
                             (e.target as any).releasePointerCapture(e.pointerId);
                           }
-                        } catch (_) {}
+                        } catch (_) { }
                         setDraggingOpeningId(null);
                         onEndDrag();
                       }
@@ -5045,7 +5045,7 @@ function RoomPreview3D({
                   if (e.nativeEvent?.target && 'setPointerCapture' in (e.nativeEvent.target as any)) {
                     (e.nativeEvent.target as any).setPointerCapture(e.pointerId);
                   }
-                } catch (_) {}
+                } catch (_) { }
                 setDraggingWallIdx(idx);
                 onStartDrag();
               }}
@@ -5056,7 +5056,7 @@ function RoomPreview3D({
                     if (e.nativeEvent?.target && 'releasePointerCapture' in (e.nativeEvent.target as any)) {
                       (e.nativeEvent.target as any).releasePointerCapture(e.pointerId);
                     }
-                  } catch (_) {}
+                  } catch (_) { }
                   setDraggingWallIdx(null);
                   onEndDrag();
                 }
@@ -5603,7 +5603,7 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
 
 
   // ─── WIZARD ONBOARDING STATE ───
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const wizardControlsRef = useRef<any>(null);
   const transitionToStep = (nextStep: number) => {
     setFadeState('out');
@@ -6313,6 +6313,11 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
   };
 
   const handleSaveDesign = async () => {
+    if (!isAuthenticated && !user) {
+      showAlert("Please log in to your account before saving your 3D room design.");
+      return;
+    }
+
     if (!projectId) {
       showAlert("No active project ID found. Please complete the wizard setup first.");
       return;
@@ -7354,6 +7359,8 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
 
         {/* 3D Preview */}
 
+        {/*   Living Room , Bedroom , Dinning Room  */}
+
 
 
 
@@ -7578,194 +7585,194 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
 
       {!readOnly && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/85 backdrop-blur-md border border-gray-200/80 shadow-2xl rounded-full px-5 py-2.5 flex items-center gap-4 z-20">
-        {/* Dollhouse view */}
-        <button
-          id="btn-dollhouse"
-          onClick={() => setTopView(false)}
-          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wider uppercase transition-all duration-300 ${!topView ? 'bg-[#1A1A1A] text-white shadow-md' : 'text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100/50'
-            }`}
-        >
-          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-            <line x1="12" y1="22.08" x2="12" y2="12" />
-          </svg>
-          Dollhouse
-        </button>
-
-        {/* Top view */}
-        <button
-          id="btn-topview"
-          onClick={() => setTopView(true)}
-          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wider uppercase transition-all duration-300 ${topView ? 'bg-[#1A1A1A] text-white shadow-md' : 'text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100/50'
-            }`}
-        >
-          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <circle cx="12" cy="12" r="10" />
-            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
-          </svg>
-          Top View
-        </button>
-
-        <div className="w-[1px] h-5 bg-gray-200" />
-
-        {/* Customise room */}
-        <button
-          id="btn-customise"
-          onClick={openCustomiseFromWorkspace}
-          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase rounded-full tracking-wider transition-all ${wizardStep === 2 && customiseFromWorkspace ? 'bg-black text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-        >
-          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-          </svg>
-          Customise Room
-        </button>
-
-        {/* Add Items */}
-        {state.designType !== 'bathroom' && (
+          {/* Dollhouse view */}
           <button
-            onClick={() => setWizardStep(4)}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase rounded-full tracking-wider transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
+            id="btn-dollhouse"
+            onClick={() => setTopView(false)}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wider uppercase transition-all duration-300 ${!topView ? 'bg-[#1A1A1A] text-white shadow-md' : 'text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100/50'
+              }`}
           >
             <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+              <line x1="12" y1="22.08" x2="12" y2="12" />
             </svg>
-            Add Items
+            Dollhouse
           </button>
-        )}
 
-        <div className="w-[1px] h-5 bg-gray-200" />
-
-        {/* Zoom controls */}
-        <div className="flex items-center gap-1">
+          {/* Top view */}
           <button
-            id="btn-zoom-in"
-            onClick={() => setZoomTrigger('in')}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100/50 transition-all"
-            title="Zoom In"
+            id="btn-topview"
+            onClick={() => setTopView(true)}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wider uppercase transition-all duration-300 ${topView ? 'bg-[#1A1A1A] text-white shadow-md' : 'text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100/50'
+              }`}
           >
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
-          </button>
-          <button
-            id="btn-zoom-out"
-            onClick={() => setZoomTrigger('out')}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100/50 transition-all"
-            title="Zoom Out"
-          >
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14" /></svg>
-          </button>
-        </div>
-
-        <div className="w-[1px] h-5 bg-gray-200" />
-
-        {/* Undo / Redo */}
-        <div className="flex items-center gap-1">
-          <button
-            id="btn-undo"
-            onClick={handleUndo}
-            disabled={undoStack.length === 0}
-            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${undoStack.length === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100/50'}`}
-            title="Undo"
-          >
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <circle cx="12" cy="12" r="10" />
+              <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
             </svg>
+            Top View
           </button>
+
+          <div className="w-[1px] h-5 bg-gray-200" />
+
+          {/* Customise room */}
           <button
-            id="btn-redo"
-            onClick={handleRedo}
-            disabled={redoStack.length === 0}
-            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${redoStack.length === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100/50'}`}
-            title="Redo"
+            id="btn-customise"
+            onClick={openCustomiseFromWorkspace}
+            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase rounded-full tracking-wider transition-all ${wizardStep === 2 && customiseFromWorkspace ? 'bg-black text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
           >
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M21 7v6h-6" /><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" />
+            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
             </svg>
+            Customise Room
           </button>
-        </div>
 
-        {selectedRoomType === 'bathroom' && (
-          <>
-            <div className="w-[1px] h-5 bg-gray-200" />
+          {/* Add Items */}
+          {state.designType !== 'bathroom' && (
+            <button
+              onClick={() => setWizardStep(4)}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase rounded-full tracking-wider transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
+            >
+              <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add Items
+            </button>
+          )}
+
+          <div className="w-[1px] h-5 bg-gray-200" />
+
+          {/* Zoom controls */}
+          <div className="flex items-center gap-1">
+            <button
+              id="btn-zoom-in"
+              onClick={() => setZoomTrigger('in')}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100/50 transition-all"
+              title="Zoom In"
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
+            </button>
+            <button
+              id="btn-zoom-out"
+              onClick={() => setZoomTrigger('out')}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100/50 transition-all"
+              title="Zoom Out"
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14" /></svg>
+            </button>
+          </div>
+
+          <div className="w-[1px] h-5 bg-gray-200" />
+
+          {/* Undo / Redo */}
+          <div className="flex items-center gap-1">
+            <button
+              id="btn-undo"
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${undoStack.length === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100/50'}`}
+              title="Undo"
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+              </svg>
+            </button>
+            <button
+              id="btn-redo"
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${redoStack.length === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:text-[#1A1A1A] hover:bg-gray-100/50'}`}
+              title="Redo"
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M21 7v6h-6" /><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" />
+              </svg>
+            </button>
+          </div>
+
+          {selectedRoomType === 'bathroom' && (
+            <>
+              <div className="w-[1px] h-5 bg-gray-200" />
 
 
 
 
 
-            {/* Measurement tool button & popup panel */}
+              {/* Measurement tool button & popup panel */}
 
 
 
 
-            <div className="relative">
-              <button
-                id="btn-measurement"
-                onClick={() => setShowMeasurementPanel(!showMeasurementPanel)}
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${showMeasurementPanel ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                title="Measurement Options"
-              >
-                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M21.3 8.24 15.76 2.7a1 1 0 0 0-1.41 0L3.27 13.78a1 1 0 0 0 0 1.41l5.54 5.54a1 1 0 0 0 1.41 0L21.3 9.66a1 1 0 0 0 0-1.42ZM7.5 17.5l1.5-1.5M10.5 14.5l1.5-1.5M13.5 11.5l1.5-1.5M16.5 8.5l1.5-1.5" />
-                </svg>
-              </button>
+              <div className="relative">
+                <button
+                  id="btn-measurement"
+                  onClick={() => setShowMeasurementPanel(!showMeasurementPanel)}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${showMeasurementPanel ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  title="Measurement Options"
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21.3 8.24 15.76 2.7a1 1 0 0 0-1.41 0L3.27 13.78a1 1 0 0 0 0 1.41l5.54 5.54a1 1 0 0 0 1.41 0L21.3 9.66a1 1 0 0 0 0-1.42ZM7.5 17.5l1.5-1.5M10.5 14.5l1.5-1.5M13.5 11.5l1.5-1.5M16.5 8.5l1.5-1.5" />
+                  </svg>
+                </button>
 
-              {showMeasurementPanel && (
-                <div className="absolute bottom-full mb-3 right-0 bg-white border border-gray-200 shadow-2xl rounded-2xl p-4 flex flex-col gap-4 min-w-[240px] z-50">
-                  <div className="flex justify-between items-center gap-4">
-                    <span className="text-xs font-bold text-gray-700">Product spacing</span>
-                    <label className="relative inline-flex items-center cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={measurementSettings.productSpacing}
-                        onChange={(e) => setMeasurementSettings(prev => ({ ...prev, productSpacing: e.target.checked }))}
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-black"></div>
-                    </label>
-                  </div>
+                {showMeasurementPanel && (
+                  <div className="absolute bottom-full mb-3 right-0 bg-white border border-gray-200 shadow-2xl rounded-2xl p-4 flex flex-col gap-4 min-w-[240px] z-50">
+                    <div className="flex justify-between items-center gap-4">
+                      <span className="text-xs font-bold text-gray-700">Product spacing</span>
+                      <label className="relative inline-flex items-center cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={measurementSettings.productSpacing}
+                          onChange={(e) => setMeasurementSettings(prev => ({ ...prev, productSpacing: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-black"></div>
+                      </label>
+                    </div>
 
-                  <div className="flex justify-between items-center gap-4">
-                    <span className="text-xs font-bold text-gray-700">Room dimensions</span>
-                    <label className="relative inline-flex items-center cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={measurementSettings.roomDimensions}
-                        onChange={(e) => setMeasurementSettings(prev => ({ ...prev, roomDimensions: e.target.checked }))}
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-black"></div>
-                    </label>
-                  </div>
+                    <div className="flex justify-between items-center gap-4">
+                      <span className="text-xs font-bold text-gray-700">Room dimensions</span>
+                      <label className="relative inline-flex items-center cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={measurementSettings.roomDimensions}
+                          onChange={(e) => setMeasurementSettings(prev => ({ ...prev, roomDimensions: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-black"></div>
+                      </label>
+                    </div>
 
-                  <div className="h-[1px] bg-gray-100" />
+                    <div className="h-[1px] bg-gray-100" />
 
-                  <div className="flex justify-between items-center gap-4">
-                    <span className="text-xs font-bold text-gray-700">Unit</span>
-                    <div className="flex bg-gray-100 rounded-lg p-0.5 border border-gray-200/50">
-                      <button
-                        type="button"
-                        onClick={() => setMeasurementSettings(prev => ({ ...prev, unit: 'ft' }))}
-                        className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${measurementSettings.unit === 'ft' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-black'}`}
-                      >
-                        ft
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setMeasurementSettings(prev => ({ ...prev, unit: 'cm' }))}
-                        className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${measurementSettings.unit === 'cm' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-black'}`}
-                      >
-                        cm
-                      </button>
+                    <div className="flex justify-between items-center gap-4">
+                      <span className="text-xs font-bold text-gray-700">Unit</span>
+                      <div className="flex bg-gray-100 rounded-lg p-0.5 border border-gray-200/50">
+                        <button
+                          type="button"
+                          onClick={() => setMeasurementSettings(prev => ({ ...prev, unit: 'ft' }))}
+                          className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${measurementSettings.unit === 'ft' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-black'}`}
+                        >
+                          ft
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMeasurementSettings(prev => ({ ...prev, unit: 'cm' }))}
+                          className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${measurementSettings.unit === 'cm' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-black'}`}
+                        >
+                          cm
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       )}
 
 

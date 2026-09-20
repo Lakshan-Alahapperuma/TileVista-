@@ -68,7 +68,14 @@ export const PackageList: React.FC = () => {
     setMaxPrice('');
   };
 
+
+
+
   // Filtering logic
+
+
+
+
   const filteredPackages = packages.filter((pkg) => {
     const price = pkg.calculatedPrice || 0;
     const min = minPrice !== '' && !isNaN(Number(minPrice)) ? Number(minPrice) : 0;
@@ -214,6 +221,13 @@ export const PackageList: React.FC = () => {
           </button>
         </div>
       ) : (
+
+
+
+
+        /* package details  */
+
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredPackages.map((pkg) => {
             return (
@@ -225,13 +239,12 @@ export const PackageList: React.FC = () => {
                   <div
                     className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-[1.03]"
                     style={{
-                      backgroundImage: `url('${
-                        pkg.imageUrl
+                      backgroundImage: `url('${pkg.imageUrl
                           ? pkg.imageUrl.startsWith('/uploads')
                             ? `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:4000'}${pkg.imageUrl}`
                             : pkg.imageUrl
                           : '/images/packages/essential-comfort-package.jpeg'
-                      }')`,
+                        }')`,
                     }}
                   />
                   <div className="absolute top-4 left-4 z-10 bg-[#1A1A1A] text-[#D4C5B9] font-bold text-[8px] uppercase tracking-widest px-2.5 py-1 flex items-center gap-1 shadow-sm rounded-sm">
