@@ -306,7 +306,7 @@ export default function CheckoutPage() {
             <FileText className="text-[#D4C5B9]" size={20} /> Showroom Quotation Reference
           </h2>
           <p className="text-xs text-gray-500 font-light mt-1.5 leading-relaxed">
-            Provide customer details to create your order and lock in active inventory reservations at our Matara POS.
+            Please provide your contact details to confirm your order. Your selected items will be reserved for you at our showroom.
           </p>
         </div>
 
