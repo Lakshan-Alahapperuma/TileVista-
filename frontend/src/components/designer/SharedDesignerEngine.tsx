@@ -353,10 +353,10 @@ function getOverlap(minA: number, maxA: number, minB: number, maxB: number): [nu
 }
 
 // Tile texture cache (canvas-generated with grout lines)
-const tileTextureCache: Record<string, THREE.CanvasTexture> = {};
-const clonedTextureCache = new Map<string, THREE.Texture>();
+const tileTextureCache: Record<string, any> = {};
+const clonedTextureCache = new Map<string, any>();
 
-function getTileTexture(color: string, repeatX: number, repeatY: number) {
+function getTileTexture(color: string, repeatX: number, repeatY: number): any {
   const key = `${color}_${repeatX}_${repeatY}`;
   if (tileTextureCache[key]) return tileTextureCache[key];
 
@@ -378,7 +378,7 @@ function getTileTexture(color: string, repeatX: number, repeatY: number) {
   return tex;
 }
 
-function getWoodTexture(color: string, repeatX: number, repeatY: number) {
+function getWoodTexture(color: string, repeatX: number, repeatY: number): any {
   const key = `wood_${color}_${repeatX}_${repeatY}`;
   if (tileTextureCache[key]) return tileTextureCache[key];
 
@@ -952,7 +952,7 @@ function FallbackColoredBox({ item, selected }: { item: any, selected: boolean }
 }
 
 function ImageTextureModel({ url, item, selected }: { url: string, item: any, selected: boolean }) {
-  const texture = useLoader(THREE.TextureLoader as any, url) as THREE.Texture;
+  const texture = useLoader(THREE.TextureLoader as any, url) as any;
   const rotation = item.isWallMounted ? [0, 0, 0] : [-Math.PI / 2, 0, 0];
   const position = [0, 0, 0];
   const itemColor = item.color || '#FFFFFF';
@@ -960,7 +960,7 @@ function ImageTextureModel({ url, item, selected }: { url: string, item: any, se
     <group>
       <mesh position={position as any} rotation={rotation as any}>
         <planeGeometry args={[3, 3]} />
-        <meshStandardMaterial map={texture} transparent={true} color={itemColor} />
+        <meshStandardMaterial map={texture as any} transparent={true} color={itemColor} />
       </mesh>
       {selected && (
         <mesh position={position as any} rotation={rotation as any}>
@@ -1192,7 +1192,7 @@ export const WINDOW_STYLES = [
   { id: 'large_window', name: 'Large Glass Window', width: 2.0, height: 1.8, sillHeight: 0.3 },
 ];
 
-function getDoorWoodTexture(baseColor: string, grainColor: string) {
+function getDoorWoodTexture(baseColor: string, grainColor: string): any {
   const key = `door_wood_${baseColor}_${grainColor}`;
   if (tileTextureCache[key]) return tileTextureCache[key];
 
@@ -1233,7 +1233,7 @@ function Door3D({ style, width, height, depth = 0.08, opacity = 1.0 }: { style: 
   const isBifold = style.includes('bifold');
 
   // Let's create white lacquer for glass/french doors and rich walnut for standard panels
-  const woodTexture = useMemo(() => {
+  const woodTexture: any = useMemo(() => {
     return isGlass
       ? getDoorWoodTexture('#f4f4f5', '#e4e4e7')
       : getDoorWoodTexture('#5c4033', '#2d1e17');
@@ -1329,13 +1329,13 @@ function Door3D({ style, width, height, depth = 0.08, opacity = 1.0 }: { style: 
     </>
   );
 
-  const groupRef = useRef<THREE.Group>(null);
+  const groupRef = useRef<any>(null);
   React.useLayoutEffect(() => {
     if (!groupRef.current) return;
-    groupRef.current.traverse((child) => {
+    groupRef.current.traverse((child: any) => {
       if (child instanceof THREE.Mesh) {
         const materials = Array.isArray(child.material) ? child.material : [child.material];
-        materials.forEach((mat) => {
+        materials.forEach((mat: any) => {
           if (mat) {
             mat.transparent = true;
             if (mat.userData.originalOpacity === undefined) {
@@ -1570,13 +1570,13 @@ function Window3D({ style, width, height, depth = 0.08, opacity = 1.0 }: { style
     </>
   );
 
-  const groupRef = useRef<THREE.Group>(null);
+  const groupRef = useRef<any>(null);
   React.useLayoutEffect(() => {
     if (!groupRef.current) return;
-    groupRef.current.traverse((child) => {
+    groupRef.current.traverse((child: any) => {
       if (child instanceof THREE.Mesh) {
         const materials = Array.isArray(child.material) ? child.material : [child.material];
-        materials.forEach((mat) => {
+        materials.forEach((mat: any) => {
           if (mat) {
             mat.transparent = true;
             if (mat.userData.originalOpacity === undefined) {
@@ -2311,25 +2311,25 @@ function RoomDimensionLine({ start, end, label, angle }: { start: [number, numbe
   return (
     <group>
       {/* Bold dimension line */}
-      <mesh position={midpoint} quaternion={rotation}>
+      <mesh position={midpoint as any} quaternion={rotation as any}>
         <boxGeometry args={[0.006, len, 0.006]} />
         <meshBasicMaterial color="#52525b" />
       </mesh>
 
       {/* Start slash tick at 45 degrees */}
-      <mesh position={start} rotation={[0, angle + Math.PI / 4, 0]}>
+      <mesh position={start as any} rotation={[0, angle + Math.PI / 4, 0] as any}>
         <boxGeometry args={[0.006, 0.006, 0.16]} />
         <meshBasicMaterial color="#52525b" />
       </mesh>
 
       {/* End slash tick at 45 degrees */}
-      <mesh position={end} rotation={[0, angle + Math.PI / 4, 0]}>
+      <mesh position={end as any} rotation={[0, angle + Math.PI / 4, 0] as any}>
         <boxGeometry args={[0.006, 0.006, 0.16]} />
         <meshBasicMaterial color="#52525b" />
       </mesh>
 
       {/* Sleek architectural label (balanced font size) */}
-      <Html position={midpoint} center distanceFactor={18}>
+      <Html position={midpoint as any} center distanceFactor={18}>
         <div style={{
           backgroundColor: '#ececec',
           color: '#3f3f46',
@@ -2513,25 +2513,25 @@ function MeasurementOverlay({
               return (
                 <group key={`spacing-${dIdx}`}>
                   {/* Thin line */}
-                  <mesh position={midpoint} quaternion={lineRotation}>
+                  <mesh position={midpoint as any} quaternion={lineRotation as any}>
                     <boxGeometry args={[0.006, len, 0.006]} />
                     <meshBasicMaterial color="#0086ff" />
                   </mesh>
 
                   {/* Tick at wall */}
-                  <mesh position={p2} rotation={[0, wallAngle, 0]}>
+                  <mesh position={p2 as any} rotation={[0, wallAngle, 0] as any}>
                     <boxGeometry args={[0.16, 0.006, 0.006]} />
                     <meshBasicMaterial color="#0086ff" />
                   </mesh>
 
                   {/* Dot at item boundary */}
-                  <mesh position={p1}>
+                  <mesh position={p1 as any}>
                     <sphereGeometry args={[0.03, 16, 16]} />
                     <meshBasicMaterial color="#ffffff" />
                   </mesh>
 
                   {/* Sleek blue badge (slightly reduced size) */}
-                  <Html position={midpoint} center distanceFactor={18}>
+                  <Html position={midpoint as any} center distanceFactor={18}>
                     <div style={{
                       backgroundColor: '#0086ff',
                       color: '#ffffff',
@@ -2632,8 +2632,8 @@ function BathroomScene({
   const draggingOpeningId = useRef<string | null>(null);
   const [hoveredWall, setHoveredWall] = useState<{ idx: number; offset: number } | null>(null);
 
-  const [osposFloorTexture, setOsposFloorTexture] = useState<THREE.Texture | null>(null);
-  const [osposWallTextures, setOsposWallTextures] = useState<Record<string, THREE.Texture>>({});
+  const [osposFloorTexture, setOsposFloorTexture] = useState<any>(null);
+  const [osposWallTextures, setOsposWallTextures] = useState<Record<string, any>>({});
 
   const catalogItems = useDesignerStore((s) => s.catalogItems);
 
@@ -2659,7 +2659,7 @@ function BathroomScene({
       if (wd.textureUrl) urlsToLoad.add(wd.textureUrl);
     });
 
-    const newMap: Record<string, THREE.Texture> = {};
+    const newMap: Record<string, any> = {};
     let loadedCount = 0;
 
     if (urlsToLoad.size === 0) {
@@ -2767,9 +2767,9 @@ function BathroomScene({
 
   // Dynamic wall and ceiling visibility refs and state
   const [ceilingVisible, setCeilingVisible] = useState(true);
-  const dirLightRef = useRef<THREE.DirectionalLight>(null);
-  const wallGroupsRef = useRef<(THREE.Group | null)[]>([]);
-  const openingGroupsRef = useRef<Record<string, THREE.Group | null>>({});
+  const dirLightRef = useRef<any>(null);
+  const wallGroupsRef = useRef<any[]>([]);
+  const openingGroupsRef = useRef<Record<string, any>>({});
 
   useFrame(() => {
     // Keep directional light position aligned with camera to avoid pitch-black unlit areas during rotation
@@ -2800,14 +2800,14 @@ function BathroomScene({
 
       const group = wallGroupsRef.current[i];
       if (group) {
-        group.traverse((child) => {
+        group.traverse((child: any) => {
           if (child instanceof THREE.Mesh) {
             const isSelectionTarget = child.name === 'selection-target';
             const meshVisible = isSelectionTarget && activeCategory === 'wall_tiles' ? true : isVisible;
             child.castShadow = meshVisible;
             child.receiveShadow = meshVisible;
             const materials = Array.isArray(child.material) ? child.material : [child.material];
-            materials.forEach((mat) => {
+            materials.forEach((mat: any) => {
               if (mat) {
                 if (mat.userData.originalOpacity === undefined) {
                   mat.userData.originalOpacity = mat.opacity !== undefined ? mat.opacity : 1.0;
@@ -2850,12 +2850,12 @@ function BathroomScene({
 
       const group = openingGroupsRef.current[opening.id];
       if (group) {
-        group.traverse((child) => {
+        group.traverse((child: any) => {
           if (child instanceof THREE.Mesh) {
             child.castShadow = isVisible;
             child.receiveShadow = isVisible;
             const materials = Array.isArray(child.material) ? child.material : [child.material];
-            materials.forEach((mat) => {
+            materials.forEach((mat: any) => {
               if (mat) {
                 if (mat.userData.originalOpacity === undefined) {
                   mat.userData.originalOpacity = mat.opacity !== undefined ? mat.opacity : 1.0;
@@ -3213,8 +3213,8 @@ function BathroomScene({
     setZoomTrigger(null);
   }, [zoomTrigger, camera, setZoomTrigger]);
 
-  const floorTexture = useMemo(() => getTileTexture(state.floorColor, 8, 8), [state.floorColor]);
-  const woodTexture = useMemo(() => getWoodTexture('#b88b5c', 8, 8), []);
+  const floorTexture: any = useMemo(() => getTileTexture(state.floorColor, 8, 8), [state.floorColor]);
+  const woodTexture: any = useMemo(() => getWoodTexture('#b88b5c', 8, 8), []);
 
   return (
     <>
@@ -4286,7 +4286,7 @@ function RoomPreview3D({
   readOnly?: boolean;
   roomOffset?: { x: number; z: number };
 }) {
-  const ref = useRef<THREE.Group>(null);
+  const ref = useRef<any>(null);
   const { camera, gl } = useThree();
   const { selectedWallIdx, setSelectedWallIdx } = useDesignerStore();
   const [draggingVertexIdx, setDraggingVertexIdx] = useState<number | null>(null);
@@ -4394,11 +4394,11 @@ function RoomPreview3D({
     bevelEnabled: false,
   }), [height, wizardStep]);
 
-  const floorTexture = useMemo(() => getTileTexture('#ffffff', 8, 8), []);
-  const woodTexture = useMemo(() => getWoodTexture('#b88b5c', 8, 8), []);
+  const floorTexture: any = useMemo(() => getTileTexture('#ffffff', 8, 8), []);
+  const woodTexture: any = useMemo(() => getWoodTexture('#b88b5c', 8, 8), []);
 
-  const previewWallGroupsRef = useRef<(THREE.Group | null)[]>([]);
-  const previewOpeningGroupsRef = useRef<Record<string, THREE.Group | null>>({});
+  const previewWallGroupsRef = useRef<any[]>([]);
+  const previewOpeningGroupsRef = useRef<Record<string, any>>({});
 
   useFrame((state, delta) => {
     if (previewZoomTrigger === 'in') {
@@ -4432,12 +4432,12 @@ function RoomPreview3D({
 
       const group = previewWallGroupsRef.current[wallIdx];
       if (group) {
-        group.traverse((child) => {
+        group.traverse((child: any) => {
           if (child instanceof THREE.Mesh) {
             child.castShadow = isVisible;
             child.receiveShadow = isVisible;
             const materials = Array.isArray(child.material) ? child.material : [child.material];
-            materials.forEach((mat) => {
+            materials.forEach((mat: any) => {
               if (mat) {
                 if (mat.userData.originalOpacity === undefined) {
                   mat.userData.originalOpacity = mat.opacity !== undefined ? mat.opacity : 1.0;
@@ -4474,12 +4474,12 @@ function RoomPreview3D({
 
       const group = previewOpeningGroupsRef.current[opening.id];
       if (group) {
-        group.traverse((child) => {
+        group.traverse((child: any) => {
           if (child instanceof THREE.Mesh) {
             child.castShadow = isVisible;
             child.receiveShadow = isVisible;
             const materials = Array.isArray(child.material) ? child.material : [child.material];
-            materials.forEach((mat) => {
+            materials.forEach((mat: any) => {
               if (mat) {
                 if (mat.userData.originalOpacity === undefined) {
                   mat.userData.originalOpacity = mat.opacity !== undefined ? mat.opacity : 1.0;

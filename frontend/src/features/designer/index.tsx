@@ -429,8 +429,8 @@ function RoomScene({
   const WIN_H = 3.0;
 
   // Dragging states
-  const doorGroupRef = useRef<THREE.Group>(null);
-  const winGroupRef  = useRef<THREE.Group>(null);
+  const doorGroupRef = useRef<any>(null);
+  const winGroupRef  = useRef<any>(null);
   const dragging     = useRef<'door' | 'window' | null>(null);
   const [orbitEnabled, setOrbitEnabled] = useState(true);
 

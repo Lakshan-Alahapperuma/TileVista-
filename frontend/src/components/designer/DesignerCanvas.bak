@@ -661,7 +661,7 @@ function FallbackColoredBox({ item, selected }: { item: any, selected: boolean }
 }
 
 function ImageTextureModel({ url, item, selected }: { url: string, item: any, selected: boolean }) {
-  const texture = useLoader(THREE.TextureLoader as any, url) as THREE.Texture;
+  const texture = useLoader(THREE.TextureLoader as any, url) as any;
   const rotation = item.isWallMounted ? [0, 0, 0] : [-Math.PI / 2, 0, 0];
   const position = item.isWallMounted ? [0, 1, 0] : [0, 0.01, 0];
   const itemColor = item.color || '#FFFFFF';
@@ -669,7 +669,7 @@ function ImageTextureModel({ url, item, selected }: { url: string, item: any, se
     <group>
       <mesh position={position as any} rotation={rotation as any}>
         <planeGeometry args={[3, 3]} />
-        <meshStandardMaterial map={texture} transparent={true} color={itemColor} />
+        <meshStandardMaterial map={texture as any} transparent={true} color={itemColor} />
       </mesh>
       {selected && (
         <mesh position={position as any} rotation={rotation as any}>
@@ -1020,7 +1020,7 @@ function Door3D({ style, width, height, depth = 0.08, opacity = 1.0 }: { style: 
     </>
   );
 
-  const groupRef = useRef<THREE.Group>(null);
+  const groupRef = useRef<any>(null);
   React.useLayoutEffect(() => {
     if (!groupRef.current) return;
     groupRef.current.traverse((child) => {
@@ -1261,7 +1261,7 @@ function Window3D({ style, width, height, depth = 0.08, opacity = 1.0 }: { style
     </>
   );
 
-  const groupRef = useRef<THREE.Group>(null);
+  const groupRef = useRef<any>(null);
   React.useLayoutEffect(() => {
     if (!groupRef.current) return;
     groupRef.current.traverse((child) => {
@@ -2046,9 +2046,9 @@ function BathroomScene({
 
   // Dynamic wall and ceiling visibility refs and state
   const [ceilingVisible, setCeilingVisible] = useState(true);
-  const dirLightRef = useRef<THREE.DirectionalLight>(null);
+  const dirLightRef = useRef<any>(null);
   const wallGroupsRef = useRef<(THREE.Group | null)[]>([]);
-  const openingGroupsRef = useRef<Record<string, THREE.Group | null>>({});
+  const openingGroupsRef = useRef<Record<string, any>>({});
 
   useFrame(() => {
     // Keep directional light position aligned with camera to avoid pitch-black unlit areas during rotation
@@ -3273,7 +3273,7 @@ function RoomPreview3D({
   activePlacement: { type: 'door' | 'window'; style: string; name: string; width: number; height: number; sillHeight: number } | null;
   setActivePlacement: (ap: any) => void; placedItems?: any[]; setPlacedItems?: any; isPlacingItem?: any; setIsPlacingItem?: any; selectedItemId?: string | null; setSelectedItemId?: any; recordHistory?: any; setOrbitEnabled?: any;
 }) {
-  const ref = useRef<THREE.Group>(null);
+  const ref = useRef<any>(null);
   const { camera, gl } = useThree();
   const [draggingVertexIdx, setDraggingVertexIdx] = useState<number | null>(null);
   const [draggingWallIdx, setDraggingWallIdx] = useState<number | null>(null);
@@ -3384,7 +3384,7 @@ function RoomPreview3D({
   const woodTexture = useMemo(() => getWoodTexture('#b88b5c', 8, 8), []);
 
   const previewWallGroupsRef = useRef<(THREE.Group | null)[]>([]);
-  const previewOpeningGroupsRef = useRef<Record<string, THREE.Group | null>>({});
+  const previewOpeningGroupsRef = useRef<Record<string, any>>({});
 
   useFrame((state, delta) => {
     if (previewZoomTrigger === 'in') {

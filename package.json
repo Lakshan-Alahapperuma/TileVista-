@@ -20,6 +20,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\" --ignore-path .gitignore"
   },
   "devDependencies": {
+    "@types/three": "^0.165.0",
     "prettier": "^3.3.0",
     "typescript": "^5.5.0"
   },
@@ -36,6 +37,7 @@
   "overrides": {
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "three": "^0.165.0"
+    "three": "^0.165.0",
+    "@types/three": "^0.165.0"
   }
 }

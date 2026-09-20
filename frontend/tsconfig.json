@@ -20,7 +20,9 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@tilevista/types": ["../shared/types/src/index.ts"]
+      "@tilevista/types": ["../shared/types/src/index.ts"],
+      "three": ["./node_modules/three"],
+      "@types/three": ["./node_modules/@types/three"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

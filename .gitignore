@@ -127,3 +127,5 @@ __pycache__/
 venv/
 env/
 ml/reports/
+.vercel
+.env*
