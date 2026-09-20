@@ -141,7 +141,7 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
     const targetIdStr = String(targetId);
     const currentPlaced = store.placedItems.length > 0 ? store.placedItems : placedItems;
     const nextPlaced = currentPlaced.filter(i => String(i.id) !== targetIdStr);
-    
+
     store.recordHistory(nextPlaced);
     store.setPlacedItems(nextPlaced);
 
@@ -290,8 +290,8 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
                   <div className="text-center py-6 text-xs text-gray-400">No pre-designed suites found.</div>
                 ) : (
                   dynamicItems.map((pkg: any) => (
-                    <div 
-                      key={pkg.id} 
+                    <div
+                      key={pkg.id}
                       className="bg-white border border-gray-150 rounded-xl p-3.5 hover:border-black transition-all flex flex-col gap-2 relative shadow-sm"
                     >
                       <div className="flex justify-between items-start">
@@ -339,7 +339,7 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
 
                               const category = (matchedItem.category || '').toLowerCase();
                               const name = (matchedItem.name || '').toLowerCase();
-                              
+
                               const formatUrl = (url?: string | null) => {
                                 if (!url) return undefined;
                                 if (url.startsWith('http://') || url.startsWith('https://')) return url;
@@ -1079,6 +1079,11 @@ export default function ProductPanel({ readOnly = false }: { readOnly?: boolean 
 
 
       {/* ── SELECTED ITEM ACTIONS ── */}
+
+
+
+
+
       {selectedItem && !isPlacingItem && (
         <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-[#1A1A1A] border border-white/10 shadow-2xl rounded-full px-5 py-3 flex items-center gap-4 z-30 text-white">
           {!isDoor && !(selectedItem as any).isOpening && (

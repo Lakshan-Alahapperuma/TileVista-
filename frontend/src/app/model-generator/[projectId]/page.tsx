@@ -3,12 +3,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { 
-  ArrowLeft, 
-  Trash2, 
-  Download, 
-  Box, 
-  Calendar, 
+import {
+  ArrowLeft,
+  Trash2,
+  Download,
+  Box,
+  Calendar,
   HardDrive,
   RefreshCw,
   Loader2,
@@ -17,17 +17,17 @@ import {
 import AdminGuard from '../../../features/auth/AdminGuard';
 import GlbModelViewer from '../../../components/canvas/GlbModelViewer';
 import ModelGenerationProgress from '../../../components/model-generator/ModelGenerationProgress';
-import { 
-  findProject, 
-  getModelProjectStatus, 
-  removeProject 
+import {
+  findProject,
+  getModelProjectStatus,
+  removeProject
 } from '../../../services/model-generator.service';
 
 export default function ProjectDetailsPage() {
   const router = useRouter();
   const params = useParams();
   const projectId = params.projectId as string;
-  
+
   const [project, setProject] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export default function ProjectDetailsPage() {
     try {
       const data = await findProject(projectId);
       setProject(data);
-      
+
       // Stop polling if completed or failed
       if (data.status === 'COMPLETED' || data.status === 'FAILED' || data.status === 'CANCELLED') {
         clearPolling();
@@ -60,7 +60,7 @@ export default function ProjectDetailsPage() {
         const statusData = await getModelProjectStatus(projectId);
         setProject((prev: any) => {
           if (!prev) return null;
-          
+
           // If status changes or progress updates
           if (prev.status !== statusData.status || prev.progress !== statusData.progress || prev.currentStep !== statusData.currentStep) {
             // If completed, fetch full project to get the newly created modelUrl
@@ -116,11 +116,11 @@ export default function ProjectDetailsPage() {
 
   const handleDownload = () => {
     if (!project || !project.modelUrl) return;
-    
+
     // Determine the full backend url to download GLB directly
     const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:4000';
     const downloadUrl = `${backendUrl}${project.modelUrl}`;
-    
+
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.download = `${project.name.replace(/\s+/g, '_')}.glb`;
@@ -134,12 +134,12 @@ export default function ProjectDetailsPage() {
   return (
     <AdminGuard>
       <div className="min-h-screen bg-[#090d16] text-[#f8fafc] p-6 md:p-12 font-sans selection:bg-[#4f46e5] selection:text-white">
-        
+
         {/* Header */}
         <header className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-slate-850 pb-6">
           <div className="flex items-center gap-4">
-            <Link 
-              href="/model-generator" 
+            <Link
+              href="/model-generator"
               className="w-10 h-10 rounded-full border border-slate-800 bg-slate-900/60 hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-all"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -184,8 +184,8 @@ export default function ProjectDetailsPage() {
               <h3 className="font-bold text-lg text-white">Project Connection Error</h3>
               <p className="text-xs text-slate-400 mt-1">{error}</p>
             </div>
-            <Link 
-              href="/model-generator" 
+            <Link
+              href="/model-generator"
               className="mt-4 px-6 py-2.5 bg-slate-800 hover:bg-slate-750 rounded-xl text-xs font-bold transition-all text-white"
             >
               Return to Dashboard
@@ -193,12 +193,12 @@ export default function ProjectDetailsPage() {
           </div>
         ) : (
           <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
+
             {/* Left sidebar info details */}
             <div className="lg:col-span-1 space-y-6">
               <div className="bg-slate-900/60 border border-slate-800 p-6 rounded-2xl space-y-4">
                 <h3 className="text-md font-bold text-white font-outfit uppercase tracking-wider">Project Information</h3>
-                
+
                 <div className="space-y-3 divide-y divide-slate-850">
                   <div className="flex justify-between items-center py-2 text-xs">
                     <span className="text-slate-400 font-semibold">Input Type</span>
@@ -242,10 +242,10 @@ export default function ProjectDetailsPage() {
 
             {/* Right main workspace details */}
             <div className="lg:col-span-2 space-y-6">
-              
+
               {/* Show progress tracker if active processing or if failed */}
               {(isActiveProcessing || project.status === 'FAILED') && (
-                <ModelGenerationProgress 
+                <ModelGenerationProgress
                   status={project.status}
                   progress={project.progress}
                   currentStep={project.currentStep}

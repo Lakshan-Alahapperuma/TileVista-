@@ -68,7 +68,7 @@ export default function PackageDetailPage({ params }: PageProps) {
         </div>
         <h4 className="text-sm font-semibold text-[#1A1A1A]">Package Not Found</h4>
         <p className="text-xs text-gray-400 leading-relaxed">{error || 'The package does not exist.'}</p>
-        <button 
+        <button
           onClick={() => router.push('/packages')}
           className="border border-gray-300 hover:border-[#1A1A1A] hover:bg-gray-50 text-[#1A1A1A] font-semibold text-xs tracking-wider uppercase px-6 py-2.5 rounded-sm transition-colors duration-300"
         >
@@ -81,7 +81,7 @@ export default function PackageDetailPage({ params }: PageProps) {
   return (
     <div className="py-8 font-sans max-w-7xl mx-auto px-4 md:px-8 space-y-8">
       {/* Back Header */}
-      <button 
+      <button
         onClick={() => router.push('/packages')}
         className="inline-flex items-center gap-2 text-xs text-gray-400 hover:text-[#1A1A1A] transition-colors group"
       >
@@ -91,7 +91,15 @@ export default function PackageDetailPage({ params }: PageProps) {
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+
+
+
+
         {/* Left Side: Details & Products (1/3 width) */}
+
+
+
+
         <div className="lg:col-span-1 space-y-8">
           <PackageDetails pkg={pkg} />
           <PackageProductList pkg={pkg} />
