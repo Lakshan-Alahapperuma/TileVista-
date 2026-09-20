@@ -5603,7 +5603,7 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
 
 
   // ─── WIZARD ONBOARDING STATE ───
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const wizardControlsRef = useRef<any>(null);
   const transitionToStep = (nextStep: number) => {
     setFadeState('out');
@@ -6313,6 +6313,11 @@ function BathroomPlannerPageInner({ catalog, categories, CustomFurniture, readOn
   };
 
   const handleSaveDesign = async () => {
+    if (!isAuthenticated && !user) {
+      showAlert("Please log in to your account before saving your 3D room design.");
+      return;
+    }
+
     if (!projectId) {
       showAlert("No active project ID found. Please complete the wizard setup first.");
       return;

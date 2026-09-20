@@ -83,8 +83,12 @@ export default function AdminCreatePackagePage() {
   const wallTextureUrl = useDesignerStore(s => s.state?.wallTextureUrl);
   const activeCategory = useDesignerStore(s => s.activeCategory);
 
-  // Fetch full OSPOS catalog items
+  // Fetch full OSPOS catalog items & initialize 3D workspace directly
   useEffect(() => {
+    const store = useDesignerStore.getState();
+    store.setWizardStep(5);
+    store.setSelectedShape('rectangular');
+
     const fetchCatalog = async () => {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
@@ -205,6 +209,7 @@ export default function AdminCreatePackagePage() {
       setSaving(false);
     }
   };
+
 
   if (loading) {
     return (
