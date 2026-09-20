@@ -3,7 +3,7 @@ import { CartItem } from '@tilevista/types';
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 const getAuthHeaders = (): HeadersInit => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('tilevista_admin_token') : null;
+  const token = typeof window !== 'undefined' ? (localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token')) : null;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;

@@ -114,6 +114,30 @@ export default function AdminCreatePackagePage() {
   const discountSavings = rawTotal * (activeDiscount / 100);
   const finalBundlePrice = Math.max(0, rawTotal - discountSavings);
 
+  // Group placed 3D items by product name with live quantities & total costs
+  const groupedActiveItems = React.useMemo(() => {
+    const map = new Map<string, { name: string; type: string; count: number; totalCost: number }>();
+    (placedItems || []).forEach(item => {
+      const nameKey = (item.name || item.type || 'Item').trim();
+      const cost = item.cost || (item as any).price || 150;
+      const existing = map.get(nameKey);
+      if (existing) {
+        existing.count += 1;
+        existing.totalCost += cost;
+      } else {
+        map.set(nameKey, {
+          name: nameKey,
+          type: item.type,
+          count: 1,
+          totalCost: cost
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [placedItems]);
+
+  const totalUniqueItemsCount = groupedActiveItems.length;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return showAlert('Please enter a package name');
@@ -190,30 +214,6 @@ export default function AdminCreatePackagePage() {
       </div>
     );
   }
-
-  // Group placed 3D items by product name with live quantities & total costs
-  const groupedActiveItems = React.useMemo(() => {
-    const map = new Map<string, { name: string; type: string; count: number; totalCost: number }>();
-    (placedItems || []).forEach(item => {
-      const nameKey = (item.name || item.type || 'Item').trim();
-      const cost = item.cost || (item as any).price || 150;
-      const existing = map.get(nameKey);
-      if (existing) {
-        existing.count += 1;
-        existing.totalCost += cost;
-      } else {
-        map.set(nameKey, {
-          name: nameKey,
-          type: item.type,
-          count: 1,
-          totalCost: cost
-        });
-      }
-    });
-    return Array.from(map.values());
-  }, [placedItems]);
-
-  const totalUniqueItemsCount = groupedActiveItems.length;
 
   return (
     <div className="space-y-6 font-sans max-w-[1700px] mx-auto pb-10">
