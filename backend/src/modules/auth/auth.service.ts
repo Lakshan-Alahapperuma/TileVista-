@@ -126,10 +126,58 @@ export class AuthService {
   async linkCart(userId: string, sessionId: string) {
     if (!sessionId || !userId) return;
     try {
-      await this.prisma.carts.updateMany({
-        where: { session_id: sessionId },
-        data: { user_id: userId },
+      const guestCart = await this.prisma.carts.findFirst({
+        where: { session_id: sessionId, user_id: null, status: 'active' },
+        include: { cart_items: true },
       });
+
+      if (!guestCart) {
+        // Detach session_id if lingering on any other cart
+        await this.prisma.carts.updateMany({
+          where: { session_id: sessionId },
+          data: { session_id: null },
+        });
+        return;
+      }
+
+      const userCart = await this.prisma.carts.findFirst({
+        where: { user_id: userId, status: 'active' },
+        include: { cart_items: true },
+        orderBy: { updated_at: 'desc' },
+      });
+
+      if (!userCart) {
+        await this.prisma.carts.update({
+          where: { cart_id: guestCart.cart_id },
+          data: { user_id: userId, session_id: null },
+        });
+      } else {
+        for (const gItem of guestCart.cart_items) {
+          const existing = userCart.cart_items.find(
+            (uItem) => uItem.ospos_item_id === gItem.ospos_item_id,
+          );
+          if (existing) {
+            await this.prisma.cart_items.update({
+              where: { cart_item_id: existing.cart_item_id },
+              data: { quantity: existing.quantity + gItem.quantity },
+            });
+          } else {
+            await this.prisma.cart_items.create({
+              data: {
+                cart_item_id: randomUUID(),
+                cart_id: userCart.cart_id,
+                ospos_item_id: gItem.ospos_item_id,
+                quantity: gItem.quantity,
+                unit_price_snapshot: gItem.unit_price_snapshot,
+              },
+            });
+          }
+        }
+        await this.prisma.carts.update({
+          where: { cart_id: guestCart.cart_id },
+          data: { status: 'converted', session_id: null },
+        });
+      }
     } catch (err) {
       console.error('Failed to link cart to user:', err);
     }
