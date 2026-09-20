@@ -952,7 +952,7 @@ function FallbackColoredBox({ item, selected }: { item: any, selected: boolean }
 }
 
 function ImageTextureModel({ url, item, selected }: { url: string, item: any, selected: boolean }) {
-  const texture = useLoader(THREE.TextureLoader, url) as THREE.Texture;
+  const texture = useLoader(THREE.TextureLoader as any, url) as THREE.Texture;
   const rotation = item.isWallMounted ? [0, 0, 0] : [-Math.PI / 2, 0, 0];
   const position = [0, 0, 0];
   const itemColor = item.color || '#FFFFFF';
