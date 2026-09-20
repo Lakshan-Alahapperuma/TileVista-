@@ -70,7 +70,7 @@ export class ProductsService {
           depth: Number(asset.asset_sizes.depth || 0),
           unit: asset.asset_sizes.unit || 'cm',
         };
-        if (!dto.size && dto.dimensions.width && dto.dimensions.height) {
+        if (dto.dimensions.width && dto.dimensions.height) {
           dto.size = `${dto.dimensions.width}x${dto.dimensions.height} ${dto.dimensions.unit}`;
         }
       }
@@ -273,7 +273,7 @@ export class ProductsService {
 
     if (size) {
       const sizesLower = size.toLowerCase().split(',');
-      result = result.filter((item) => item.tags.some(tag => sizesLower.includes(tag.toLowerCase())));
+      result = result.filter((item) => item.size && sizesLower.includes(item.size.toLowerCase()));
     }
 
     if (minPrice !== undefined) {
