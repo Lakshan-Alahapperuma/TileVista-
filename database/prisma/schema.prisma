@@ -71,13 +71,6 @@ model carts {
   @@index([user_id], map: "fk_cart_user")
 }
 
-model categories {
-  category_id   String     @id @db.Char(36)
-  category_name String     @unique(map: "category_name") @db.VarChar(100)
-  description   String?    @db.Text
-  products      products[]
-}
-
 model design_elements {
   element_id   String       @id @db.Char(36)
   design_id    String       @db.Char(36)
@@ -119,21 +112,6 @@ model design_items {
   @@index([product_id], map: "fk_design_item_product")
 }
 
-model design_measurements {
-  measurement_id String       @id @db.Char(36)
-  design_id      String       @db.Char(36)
-  point_a_x      Decimal?     @db.Decimal(10, 2)
-  point_a_y      Decimal?     @db.Decimal(10, 2)
-  point_a_z      Decimal?     @db.Decimal(10, 2)
-  point_b_x      Decimal?     @db.Decimal(10, 2)
-  point_b_y      Decimal?     @db.Decimal(10, 2)
-  point_b_z      Decimal?     @db.Decimal(10, 2)
-  distance       Decimal?     @db.Decimal(10, 2)
-  room_designs   room_designs @relation(fields: [design_id], references: [design_id], onDelete: Cascade, onUpdate: Restrict, map: "fk_measurement_design")
-
-  @@index([design_id], map: "fk_measurement_design")
-}
-
 model design_openings {
   opening_id   String                @id @db.Char(36)
   design_id    String                @db.Char(36)
@@ -151,16 +129,6 @@ model design_openings {
   @@index([wall_id], map: "fk_opening_wall")
 }
 
-model design_snapshots {
-  snapshot_id  String       @id @db.Char(36)
-  design_id    String       @db.Char(36)
-  image_url    String?      @db.VarChar(500)
-  created_at   DateTime?    @default(now()) @db.DateTime(0)
-  room_designs room_designs @relation(fields: [design_id], references: [design_id], onDelete: Cascade, onUpdate: Restrict, map: "fk_snapshot_design")
-
-  @@index([design_id], map: "fk_snapshot_design")
-}
-
 model design_walls {
   wall_id              String            @id @db.Char(36)
   design_id            String            @db.Char(36)
@@ -170,6 +138,7 @@ model design_walls {
   wall_height          Decimal?          @db.Decimal(10, 2)
   wall_color           String?           @db.VarChar(50)
   tile_asset_id        String?           @db.Char(36)
+  tile_texture_url     String?           @db.VarChar(500)
   tile_coverage_height Decimal?          @db.Decimal(10, 2)
   design_openings      design_openings[]
   product_assets       product_assets?   @relation(fields: [tile_asset_id], references: [asset_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_wall_asset")
@@ -236,6 +205,7 @@ model order_status_history {
 model orders {
   order_id               String                   @id @db.Char(36)
   order_reference        String                   @unique(map: "order_reference") @db.VarChar(100)
+  ospos_sale_id          Int?
   user_id                String                   @db.Char(36)
   design_id              String?                  @db.Char(36)
   total_amount           Decimal                  @db.Decimal(12, 2)
@@ -274,6 +244,7 @@ model packages {
   description         String?          @db.Text
   cover_image         String?          @db.VarChar(500)
   discount_percentage Decimal?         @default(0.00) @db.Decimal(5, 2)
+  design_data         String?          @db.LongText
   status              packages_status? @default(active)
   created_at          DateTime?        @default(now()) @db.DateTime(0)
   package_items       package_items[]
@@ -311,17 +282,14 @@ model product_assets {
 model products {
   product_id       String            @id @db.Char(36)
   ospos_item_id    Int               @unique(map: "ospos_item_id")
-  category_id      String            @db.Char(36)
   is_active        Boolean?          @default(true)
   created_at       DateTime?         @default(now()) @db.DateTime(0)
   updated_at       DateTime?         @default(now()) @db.DateTime(0)
   design_items     design_items[]
   package_items    package_items[]
   product_assets   product_assets?
-  categories       categories        @relation(fields: [category_id], references: [category_id], onUpdate: Restrict, map: "fk_product_category")
   stock_thresholds stock_thresholds?
 
-  @@index([category_id], map: "fk_product_category")
   @@index([ospos_item_id], map: "idx_products_ospos")
 }
 
@@ -334,13 +302,14 @@ model room_designs {
   length              Decimal?                  @db.Decimal(10, 2)
   width               Decimal?                  @db.Decimal(10, 2)
   height              Decimal?                  @db.Decimal(10, 2)
+  floor_texture_url   String?                   @db.VarChar(500)
+  wall_texture_url    String?                   @db.VarChar(500)
   created_at          DateTime?                 @default(now()) @db.DateTime(0)
   updated_at          DateTime?                 @default(now()) @db.DateTime(0)
   design_elements     design_elements[]
   design_items        design_items[]
-  design_measurements design_measurements[]
+  custom_design_items custom_design_items[]
   design_openings     design_openings[]
-  design_snapshots    design_snapshots[]
   design_walls        design_walls[]
   orders              orders[]
   users               users                     @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: Restrict, map: "fk_design_user")
@@ -394,23 +363,24 @@ model user_addresses {
 }
 
 model users {
-  user_id              String                 @id @db.Char(36)
-  first_name           String                 @db.VarChar(100)
-  last_name            String                 @db.VarChar(100)
-  email                String                 @unique(map: "email") @db.VarChar(150)
-  phone                String?                @db.VarChar(20)
-  password_hash        String                 @db.VarChar(255)
-  role                 users_role             @default(customer)
-  status               users_status           @default(active)
-  created_at           DateTime?              @default(now()) @db.DateTime(0)
-  updated_at           DateTime?              @default(now()) @db.DateTime(0)
-  admin_logs           admin_logs[]
-  carts                carts[]
-  notifications        notifications[]
-  order_status_history order_status_history[]
-  orders               orders[]
-  room_designs         room_designs[]
-  user_addresses       user_addresses[]
+  user_id                 String                   @id @db.Char(36)
+  first_name              String                   @db.VarChar(100)
+  last_name               String                   @db.VarChar(100)
+  email                   String                   @unique(map: "email") @db.VarChar(150)
+  phone                   String?                  @db.VarChar(20)
+  password_hash           String                   @db.VarChar(255)
+  role                    users_role               @default(customer)
+  status                  users_status             @default(active)
+  created_at              DateTime?                @default(now()) @db.DateTime(0)
+  updated_at              DateTime?                @default(now()) @db.DateTime(0)
+  admin_logs              admin_logs[]
+  carts                   carts[]
+  notifications           notifications[]
+  order_status_history    order_status_history[]
+  orders                  orders[]
+  room_designs            room_designs[]
+  user_addresses          user_addresses[]
+  modelGenerationProjects ModelGenerationProject[]
 }
 
 enum design_openings_type {
@@ -442,6 +412,7 @@ enum asset_sizes_unit {
 
 enum inventory_reservations_status {
   active
+  released
   expired
   completed
 }
@@ -477,4 +448,95 @@ enum orders_payment_status {
 enum users_status {
   active
   inactive
+}
+
+model custom_design_items {
+  custom_item_id String       @id @db.Char(36)
+  design_id      String       @db.Char(36)
+  item_type      String       @db.VarChar(100)
+  item_name      String?      @db.VarChar(150)
+  model_url      String?      @db.VarChar(500)
+  position_x     Decimal?     @db.Decimal(10, 2)
+  position_y     Decimal?     @db.Decimal(10, 2)
+  position_z     Decimal?     @db.Decimal(10, 2)
+  rotation_y     Decimal?     @default(0.00) @db.Decimal(10, 2)
+  created_at     DateTime?    @default(now()) @db.DateTime(0)
+  room_designs   room_designs @relation(fields: [design_id], references: [design_id], onDelete: Cascade, onUpdate: Restrict, map: "fk_custom_item_design")
+
+  @@index([design_id], map: "fk_custom_item_design")
+}
+
+enum inquiries_status {
+  pending
+  replied
+}
+
+model inquiries {
+  inquiry_id String           @id @db.Char(36)
+  name       String           @db.VarChar(150)
+  email      String           @db.VarChar(150)
+  subject    String?          @db.VarChar(255)
+  message    String           @db.Text
+  status     inquiries_status @default(pending)
+  created_at DateTime?        @default(now()) @db.DateTime(0)
+  updated_at DateTime?        @default(now()) @db.DateTime(0)
+}
+
+enum ModelGenerationStatus {
+  UPLOADED
+  QUEUED
+  EXTRACTING_FRAMES
+  RECONSTRUCTING
+  GENERATING_MESH
+  TEXTURING
+  EXPORTING_GLB
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ModelInputType {
+  VIDEO
+  IMAGES
+}
+
+model ModelGenerationProject {
+  id                  String                @id @default(cuid())
+  userId              String                @db.Char(36)
+  name                String
+  description         String?               @db.Text
+  inputType           ModelInputType
+  status              ModelGenerationStatus @default(UPLOADED)
+  progress            Int                   @default(0)
+  currentStep         String?
+  inputVideoPath      String?
+  outputGlbPath       String?
+  thumbnailPath       String?
+  errorMessage        String?               @db.Text
+  fileSize            BigInt?
+  processingStartedAt DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  user   users                  @relation(fields: [userId], references: [user_id], onDelete: Cascade)
+  images ModelGenerationImage[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("model_generation_projects")
+}
+
+model ModelGenerationImage {
+  id           String   @id @default(cuid())
+  projectId    String
+  filePath     String
+  originalName String?
+  orderNumber  Int?
+  createdAt    DateTime @default(now())
+
+  project ModelGenerationProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("model_generation_images")
 }

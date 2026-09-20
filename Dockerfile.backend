@@ -1,0 +1,55 @@
+# Multi-stage Dockerfile for TileVista Backend (NestJS + Prisma + NPM Workspace)
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy root package definitions
+COPY package.json package-lock.json ./
+COPY shared/types/package.json ./shared/types/
+COPY backend/package.json ./backend/
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY shared ./shared
+COPY database ./database
+COPY backend ./backend
+
+# Build shared types
+RUN npm run build:shared
+
+# Generate Prisma Client
+RUN npm run prisma:generate --workspace=backend
+
+# Build NestJS Backend
+RUN npm run build:backend
+
+# Production stage
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=4000
+
+# Copy root package definitions
+COPY package.json package-lock.json ./
+COPY shared/types/package.json ./shared/types/
+COPY backend/package.json ./backend/
+
+# Install production dependencies only
+RUN npm ci --only=production
+
+# Copy built artifacts from builder
+COPY --from=builder /app/shared/types/dist ./shared/types/dist
+COPY --from=builder /app/backend/dist ./backend/dist
+COPY --from=builder /app/database ./database
+COPY --from=builder /app/node_modules ./node_modules
+
+# Ensure uploads folder exists
+RUN mkdir -p /app/uploads
+
+EXPOSE 4000
+
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=./database/prisma/schema.prisma && node backend/dist/main"]

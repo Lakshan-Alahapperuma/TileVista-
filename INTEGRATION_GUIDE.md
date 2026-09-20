@@ -6,27 +6,31 @@ This document provides a guide for team members regarding the inventory integrat
 
 ## 1. Architectural Strategy
 
-OSPOS is the **authoritative inventory source of truth**. All stock updates, cashier sales, pricing adjustments, item names, and SKU classifications must be managed inside OSPOS.
+OSPOS is the **authoritative inventory source of truth**. All stock updates, cashier sales, pricing adjustments, item names, category taxonomies, and SKU classifications must be managed inside OSPOS. The local database explicitly does not store categories.
 
 ### Database Division
 * **OSPOS Database (`ospos`):** Manages `ospos_items` (items list, SKU codes, descriptions, and standard pricing) and `ospos_item_quantities` (real-time physical showroom stock).
-* **TileVista Database (`tilevista_db`):** The `Product` table has been removed. A new `item_asset_catalog` table manages ONLY the visual design configurations and 3D GLB model specifications linked to OSPOS articles:
+* **TileVista Database (`tilevista_db`):** A cluster of normalized tables (`products`, `product_assets`, `asset_sizes`, `asset_transformations`) manages the visual design configurations and 3D GLB model specifications linked to OSPOS articles:
 
 ```mermaid
 erDiagram
-    OSPOS-ITEMS ||--o| ITEM-ASSET-CATALOG : "linked via ospos_item_id"
-    ITEM-ASSET-CATALOG {
-        string id PK
+    OSPOS-ITEMS ||--o| PRODUCTS : "linked via ospos_item_id"
+    PRODUCTS ||--o| PRODUCT-ASSETS : "1:1 relation"
+    PRODUCT-ASSETS ||--o| ASSET-SIZES : "1:1 relation"
+    PRODUCT-ASSETS ||--o| ASSET-TRANSFORMATIONS : "1:1 relation"
+    
+    PRODUCTS {
+        string product_id PK
         int ospos_item_id FK
+        boolean is_active
+    }
+    PRODUCT-ASSETS {
+        string asset_id PK
         string image_url
         string glb_url
-        float scale_x
-        float scale_y
-        float scale_z
-        float rotation_y
-        string material
-        string finish
-        boolean is_enabled
+        string material_type
+        string color_family
+        boolean is_visible
     }
 ```
 
@@ -37,14 +41,16 @@ erDiagram
 All backend endpoints are routed through the NestJS gateway.
 
 ### Data Aggregation Layer
-The backend `ItemsService` fetches live listings from the legacy OSPOS API and merges them with the `ItemAssetCatalog` entries on the fly. The final unified payload is returned to the frontend as a `UnifiedItemDto` array.
+The backend `ProductsService` fetches live listings from the legacy OSPOS API and merges them with the `ItemAssetCatalog` entries on the fly. The final unified payload is returned to the frontend as a `UnifiedItemDto` array.
 
 ### Endpoints Matrix
 | Method | Endpoint | Access Level | Description |
 |---|---|---|---|
-| **GET** | `/api/items` | Public | Returns all active showroom items mapped with their 3D/media assets. |
-| **GET** | `/api/items/:id` | Public | Returns a single item merged with its asset configurations. |
-| **GET** | `/api/admin/items` | Admin | Returns the complete catalog with image and GLB file status badges. |
+| **GET** | `/api/items` | Public | Returns all active showroom items mapped with their 3D/media assets. Excludes items without local assets or marked invisible. |
+| **GET** | `/api/items/:id` | Public | Returns a single item merged with its asset configurations. 404s if invisible. |
+| **GET** | `/api/admin/items` | Admin | Returns the complete catalog with image and GLB file status badges. Includes hidden items. |
+| **GET** | `/api/admin/products/pending-review` | Admin | Returns OSPOS items that have not yet been published to TileVista. |
+| **POST** | `/api/admin/products/publish` | Admin | Publishes a pending OSPOS item to TileVista by creating product, asset, size, and transform records in a single transaction. |
 | **PUT** | `/api/admin/items/:id/asset` | Admin | Creates or updates rotation, tags, materials, and scaling assets. |
 | **POST** | `/api/admin/items/:id/upload-image` | Admin | Uploads an image. File is renamed using a slug of its item name. |
 | **POST** | `/api/admin/items/:id/upload-glb` | Admin | Uploads a `.glb` 3D model file, renaming it appropriately. |

@@ -53,12 +53,11 @@ export const Hero: React.FC<HeroProps> = ({
       description:
         "Explore premium tiles, bathware, and accessories with TileVista's interactive 3D design experience. Visualize your ideas, compare products, and create spaces that match your style with confidence.",
       bg: 'from-[#1A1A1A] via-[#2a2520] to-[#1A1A1A]',
-      imageUrl:
-        'https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&q=80&w=1920',
-      btn1Label: 'LAUNCH 3D DESIGNER',
-      btn1Action: onLaunchDesigner,
-      btn2Label: 'BROWSE PRODUCTS',
-      btn2Action: onBrowseProducts ?? (() => {}),
+      imageUrl: '/images/hero/slide1.jpg',
+      btn1Label: 'BROWSE PRODUCTS',
+      btn1Action: onBrowseProducts ?? (() => {}),
+      btn2Label: 'EXPLORE PACKAGES',
+      btn2Action: onExplorePackages,
     },
 
     // ── SLIDE 2 — Tile Collections ─────────────────────────────────────────
@@ -76,10 +75,9 @@ export const Hero: React.FC<HeroProps> = ({
       description:
         'Explore our extensive collection of wall tiles, floor tiles, outdoor tiles, and mosaic designs. Find the perfect combination of style, texture, and durability to transform any interior or exterior space.',
       bg: 'from-[#1A1A1A] via-[#201c18] to-[#2a2015]',
-      // ← Replace the URL below with your tile collection image when ready
       imageUrl: '/images/hero/slide2.jpg',
       btn1Label: 'EXPLORE TILE COLLECTIONS',
-      btn1Action: onExploreTiles ?? onBrowseProducts ?? (() => {}),
+      btn1Action: onExploreTiles ?? (() => {}),
       btn2Label: 'BROWSE ALL PRODUCTS',
       btn2Action: onBrowseProducts ?? (() => {}),
     },
@@ -99,8 +97,7 @@ export const Hero: React.FC<HeroProps> = ({
       description:
         'Create your own room layout, experiment with tiles, customize colors, and place products in a realistic 3D environment. Explore different designs and make confident decisions before visiting the showroom.',
       bg: 'from-[#111827] via-[#1a1f2e] to-[#1A1A1A]',
-      // ← Replace the URL below with your 3D designer image when ready
-      imageUrl: null,
+      imageUrl: '/images/hero/slide3.jpg',
       btn1Label: 'LAUNCH 3D DESIGNER',
       btn1Action: onLaunchDesigner,
       btn2Label: 'EXPLORE CURATED PACKAGES',
@@ -170,7 +167,7 @@ export const Hero: React.FC<HeroProps> = ({
   const bgClass = animating ? 'opacity-0 scale-100' : 'opacity-100 scale-105';
 
   return (
-    <section className="relative w-full h-[580px] md:h-[680px] flex items-center justify-start overflow-hidden bg-[#1A1A1A]">
+    <section className="relative w-full h-[calc(100vh-104px)] min-h-[600px] flex items-center justify-start overflow-hidden bg-[#1A1A1A]">
 
       {/* ── Background layer ── */}
       {slide.imageUrl ? (
@@ -200,14 +197,8 @@ export const Hero: React.FC<HeroProps> = ({
 
       {/* ── Slide content ── */}
       <div
-        className={`relative max-w-7xl w-full mx-auto px-6 md:px-12 z-10 text-white flex flex-col items-start gap-5 font-sans transition-all duration-500 ease-out ${contentClass}`}
+        className={`relative max-w-7xl w-full mx-auto px-4 md:px-8 z-10 text-white flex flex-col items-start gap-5 font-sans transition-all duration-500 ease-out ${contentClass}`}
       >
-        {/* Small tag */}
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#D4C5B9]/15 border border-[#D4C5B9]/25 text-[#D4C5B9] text-[10px] font-bold uppercase tracking-[0.25em] leading-none">
-          {slide.tagIcon}
-          <span>{slide.tag}</span>
-        </div>
-
         {/* Main heading */}
         <h1 className="text-4xl md:text-5xl lg:text-6xl font-light tracking-tight max-w-3xl leading-[1.1] md:leading-[1.08]">
           {slide.heading}

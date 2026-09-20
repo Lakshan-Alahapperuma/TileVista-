@@ -108,3 +108,22 @@ logs/
 # ----------------------------
 backend/uploads/
 frontend/public/uploads/
+/uploads/
+
+# ----------------------------
+# Archives & Bundles
+# ----------------------------
+*.zip
+
+# ----------------------------
+# Python & Jupyter Artifacts
+# ----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+*.ipynb
+.venv/
+venv/
+env/
+ml/reports/

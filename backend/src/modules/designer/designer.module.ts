@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
-import { DesignerService } from './designer.service';
-import { DesignerController } from './designer.controller';
+import { DesignerService } from './services/designer.service';
+import { DesignerController } from './controllers/designer.controller';
+import { DesignerRepository } from './repositories/designer.repository';
 
 @Module({
-  providers: [DesignerService],
+  providers: [DesignerService, DesignerRepository],
   controllers: [DesignerController],
   exports: [DesignerService],
 })

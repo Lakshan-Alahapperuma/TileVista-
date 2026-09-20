@@ -26,14 +26,19 @@ export function calculateBilling(
   taxRatePercent = 15,
   specialPromoDiscount = 0
 ): BillingDetails {
-  const subtotal = items.reduce((sum, item) => {
-    const itemPrice = calculateDiscountedPrice(item.product.price, item.product.discount);
-    return sum + itemPrice * item.quantity;
+  const subtotal = items.reduce((sum, cartItem) => {
+    // If backend provided lineTotal directly, use it
+    if (cartItem.lineTotal !== undefined) {
+      return sum + cartItem.lineTotal;
+    }
+    // Fallback for mock data or if lineTotal isn't set yet
+    const price = cartItem.item?.price || 0;
+    return sum + (price * cartItem.quantity);
   }, 0);
 
   const discount = Number(specialPromoDiscount.toFixed(2));
   const subtotalAfterPromo = Math.max(0, subtotal - discount);
-  const tax = Number((subtotalAfterPromo * (taxRatePercent / 100)).toFixed(2));
+  const tax = 0;
   const total = Number((subtotalAfterPromo + tax).toFixed(2));
 
   return {

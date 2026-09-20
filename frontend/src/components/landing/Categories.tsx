@@ -13,28 +13,28 @@ export const Categories: React.FC<CategoriesProps> = ({ onSelectCategory }) => {
       id: 'tiles',
       title: 'Tiles',
       subtitle: 'Elegant Designs, Lasting Quality',
-      image: 'images/categories/tiles.jpg',
+      image: '/images/categories/tiles.jpg',
       categoryTag: 'TILE'
     },
     {
       id: 'wash-basins',
       title: 'Wash Basins',
       subtitle: 'Style Meets Everyday Comfort',
-      image: 'images/categories/wash-basins.jpg',
+      image: '/images/categories/wash-basins.jpg',
       categoryTag: 'BATHWARE'
     },
     {
       id: 'water-closets',
       title: 'Water Closets',
       subtitle: 'Modern Comfort, Reliable Performance',
-      image: 'images/categories/water-closets.jpg',
+      image: '/images/categories/water-closets.jpg',
       categoryTag: 'BATHWARE'
     },
     {
       id: 'accessories',
       title: 'Accessories',
       subtitle: 'Complete Your Bathroom Space',
-      image: 'images/categories/accessories.png',
+      image: '/images/categories/accessories.png',
       categoryTag: 'BATHWARE'
     }
   ];
@@ -53,14 +53,6 @@ export const Categories: React.FC<CategoriesProps> = ({ onSelectCategory }) => {
               Explore Collection
             </h2>
           </div>
-          
-          <button 
-            onClick={() => onSelectCategory('ALL')} 
-            className="flex items-center gap-1 text-[11px] font-bold tracking-wider text-[#1A1A1A] uppercase border-b border-[#1A1A1A] pb-0.5 hover:opacity-75 transition-all"
-          >
-            <span>VIEW ALL</span>
-            <ArrowUpRight size={13} />
-          </button>
         </div>
 
         {/* 4-Column Grid */}
@@ -68,7 +60,7 @@ export const Categories: React.FC<CategoriesProps> = ({ onSelectCategory }) => {
           {categoriesList.map((cat) => (
             <div
               key={cat.id}
-              onClick={() => onSelectCategory(cat.categoryTag)}
+              onClick={() => onSelectCategory(cat.id)}
               className="group relative h-[320px] overflow-hidden bg-gray-900 cursor-pointer shadow-sm hover:shadow-md hover:scale-[1.02] transition-all duration-300"
             >
               {/* Image Background */}

@@ -10,17 +10,27 @@ interface InventoryItem {
   name: string;
   quantity: number;
   category: string;
+  categoryId: number | null;
+  subcategoryId: number | null;
   price: number;
 }
 
 export const InventoryTable: React.FC = () => {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState<boolean>(false);
+  
   const [search, setSearch] = useState<string>('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | 'ALL'>('ALL');
+  const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<number | 'ALL'>('ALL');
 
-  const API_BASE = 'http://localhost:4000/api';
+  const [appliedSearch, setAppliedSearch] = useState<string>('');
+  const [appliedCategoryId, setAppliedCategoryId] = useState<number | 'ALL'>('ALL');
+  const [appliedSubcategoryId, setAppliedSubcategoryId] = useState<number | 'ALL'>('ALL');
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
   const fetchInventory = async (isSync = false) => {
     if (isSync) {
@@ -30,7 +40,7 @@ export const InventoryTable: React.FC = () => {
     }
     setError(null);
     try {
-      const token = localStorage.getItem('tilevista_admin_token');
+      const token = localStorage.getItem('tilevista_admin_token') || sessionStorage.getItem('tilevista_admin_token');
       const response = await fetch(`${API_BASE}/inventory`, {
         headers: {
           'Authorization': `Bearer ${token || ''}`,
@@ -64,11 +74,17 @@ export const InventoryTable: React.FC = () => {
 
   const filteredInventory = inventory.filter((item) => {
     const matchesSearch = 
-      item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.sku.toLowerCase().includes(search.toLowerCase()) ||
-      item.category.toLowerCase().includes(search.toLowerCase());
-    return matchesSearch;
+      item.name.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+      item.sku.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+      item.category.toLowerCase().includes(appliedSearch.toLowerCase());
+      
+    const matchesCategory = appliedCategoryId === 'ALL' ? true : item.categoryId === appliedCategoryId;
+    const matchesSubcategory = appliedSubcategoryId === 'ALL' ? true : item.subcategoryId === appliedSubcategoryId;
+      
+    return matchesSearch && matchesCategory && matchesSubcategory;
   });
+
+  const activeCategory = categories.find(c => c.id === selectedCategoryId);
 
   return (
     <div className="bg-white border border-gray-200 p-8 shadow-sm">
@@ -98,16 +114,75 @@ export const InventoryTable: React.FC = () => {
         </div>
       </div>
 
-      {/* Search Filter */}
-      <div className="relative mb-6">
-        <input
-          type="text"
-          placeholder="Filter inventory by name, SKU code, or category..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-[#F9F9F7] border border-gray-200 px-4 py-2.5 pl-9 text-xs text-[#1A1A1A] focus:outline-none focus:border-[#D4C5B9] font-light transition-colors"
-        />
-        <Search size={13} className="text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+      {/* Search Input and Filter Row */}
+      <div className="flex flex-col mb-6 bg-[#F9F9F7] border border-gray-200 p-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              placeholder="Search inventory by name, SKU code..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-white border border-gray-200 px-4 py-2.5 pl-9 text-xs text-[#1A1A1A] focus:outline-none focus:border-[#D4C5B9] font-light transition-colors"
+            />
+            <Search size={13} className="text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          </div>
+
+          <select
+            value={selectedCategoryId}
+            onChange={(e) => {
+              const val = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value);
+              setSelectedCategoryId(val);
+              setSelectedSubcategoryId('ALL');
+            }}
+            className="bg-white border border-gray-200 px-4 py-2.5 text-xs text-[#1A1A1A] focus:outline-none focus:border-[#D4C5B9] min-w-[160px]"
+          >
+            <option value="ALL">All Categories</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
+
+          <select
+            value={selectedSubcategoryId}
+            onChange={(e) => {
+              const val = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value);
+              setSelectedSubcategoryId(val);
+            }}
+            disabled={selectedCategoryId === 'ALL' || !activeCategory?.subcategories?.length}
+            className="bg-white border border-gray-200 px-4 py-2.5 text-xs text-[#1A1A1A] focus:outline-none focus:border-[#D4C5B9] min-w-[160px] disabled:opacity-50"
+          >
+            <option value="ALL">All Subcategories</option>
+            {activeCategory?.subcategories?.map((sub: any) => (
+              <option key={sub.id} value={sub.id}>{sub.name}</option>
+            ))}
+          </select>
+
+          <button
+            onClick={() => {
+              setAppliedSearch(search);
+              setAppliedCategoryId(selectedCategoryId);
+              setAppliedSubcategoryId(selectedSubcategoryId);
+            }}
+            className="px-6 py-2.5 text-[10px] bg-[#1A1A1A] hover:bg-black text-white font-bold tracking-widest uppercase transition-colors whitespace-nowrap"
+          >
+            Apply Filter
+          </button>
+
+          <button
+            onClick={() => {
+              setSearch('');
+              setSelectedCategoryId('ALL');
+              setSelectedSubcategoryId('ALL');
+              setAppliedSearch('');
+              setAppliedCategoryId('ALL');
+              setAppliedSubcategoryId('ALL');
+            }}
+            className="px-6 py-2.5 text-[10px] bg-white border border-gray-200 text-gray-500 hover:text-[#1A1A1A] hover:bg-gray-50 font-bold tracking-widest uppercase transition-colors whitespace-nowrap"
+          >
+            Reset
+          </button>
+        </div>
       </div>
 
       {/* Main Table Content */}

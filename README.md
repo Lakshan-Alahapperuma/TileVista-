@@ -39,7 +39,7 @@ tile-vista/
 *   **Monorepo orchestration:** [Turborepo](https://turbo.build/) + NPM Workspaces
 *   **Frontend Client:** [Next.js 14 (App Router)](https://nextjs.org/) + [React Three Fiber (R3F)](https://r3f.docs.pmnd.rs/) + [Three.js](https://threejs.org/) + [Tailwind CSS](https://tailwindcss.com/)
 *   **Backend Server:** [NestJS (Node.js framework)](https://nestjs.com/) + [Passport JWT Auth](https://passportjs.org/)
-*   **Database layer ORM:** [Prisma](https://www.prisma.io/) + MySQL provider mapping
+*   **Database layer ORM:** [Prisma](https://www.prisma.io/) + MySQL provider mapping (Visual assets only; inventory and categories managed via OSPOS API)
 
 ---
 

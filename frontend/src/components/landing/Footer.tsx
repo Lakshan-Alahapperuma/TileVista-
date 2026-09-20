@@ -89,7 +89,7 @@ export const Footer: React.FC = () => {
         {/* Row 3: Copy copyrights & developer link */}
         <div className="flex flex-col sm:flex-row items-center justify-between pt-8 text-[10px] text-gray-500 tracking-wide font-light gap-4">
           <span>
-            © 2026 Alahapperuma Trade Center. All rights reserved.
+            &copy; 2026 Alahapperuma Trade Center. All rights reserved.
           </span>
           <span className="flex items-center gap-1.5">
             <span>Designed & Developed by</span>

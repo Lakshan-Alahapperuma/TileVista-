@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OsposIntegrationService, OsposItem } from '../integrations/ospos/ospos.service';
-import { UnifiedItemDto, UpsertAssetDto } from './dto/unified-item.dto';
+import { UnifiedItemDto, UpsertAssetDto, PublishProductDto } from './dto/unified-item.dto';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class ProductsService {
@@ -19,16 +20,31 @@ export class ProductsService {
     osposItem: OsposItem,
     dbProduct: any | null,
     isStaleData = false,
+    reservedQuantity = 0,
   ): UnifiedItemDto {
     const dto = new UnifiedItemDto();
     dto.itemId = osposItem.item_id;
+    dto.productId = dbProduct ? dbProduct.product_id : null;
     dto.name = osposItem.name;
     dto.category = osposItem.category ?? '';
+    dto.categoryId = osposItem.category_id ?? null;
+    dto.subcategoryId = osposItem.subcategory_id ?? null;
     dto.sku = osposItem.sku ?? '';
     dto.description = osposItem.description ?? null;
     dto.price = osposItem.price;
     dto.quantity = osposItem.quantity;
+    dto.reservedQuantity = reservedQuantity;
+    dto.effectiveAvailable = Math.max(0, osposItem.quantity - reservedQuantity);
     dto.isStaleData = isStaleData;
+    dto.brand = osposItem.brand ?? null;
+    dto.color = osposItem.color ?? null;
+
+    // 1. Map OSPOS Attributes (Brand, Color, Material, Size)
+    dto.brand = osposItem.attributes?.['Brand'] || osposItem.attributes?.['brand'] || null;
+    dto.color = osposItem.attributes?.['Color'] || osposItem.attributes?.['color'] || null;
+    const osposSize = osposItem.attributes?.['Size'] || osposItem.attributes?.['size'] || null;
+    dto.size = osposSize;
+    dto.dimensions = null;
 
     if (dbProduct && dbProduct.product_assets) {
       const asset = dbProduct.product_assets;
@@ -45,9 +61,23 @@ export class ProductsService {
       dto.tags = asset.product_asset_tags
         ? asset.product_asset_tags.map((pat: any) => pat.tags?.tag_name).filter(Boolean)
         : [];
-      dto.material = asset.material_type ?? null;
-      dto.finish = asset.color_family ?? null;
+      dto.material = osposItem.attributes?.['Material'] || osposItem.attributes?.['material'] || osposItem.material || asset.material_type || null;
+      dto.finish = osposItem.attributes?.['Color'] || osposItem.attributes?.['color'] || osposItem.color || asset.color_family || null;
+      
+      if (asset.asset_sizes) {
+        dto.dimensions = {
+          width: Number(asset.asset_sizes.width || 0),
+          height: Number(asset.asset_sizes.height || 0),
+          depth: Number(asset.asset_sizes.depth || 0),
+          unit: asset.asset_sizes.unit || 'cm',
+        };
+        if (!dto.size && dto.dimensions.width && dto.dimensions.height) {
+          dto.size = `${dto.dimensions.width}x${dto.dimensions.height} ${dto.dimensions.unit}`;
+        }
+      }
+
       dto.isEnabled = dbProduct.is_active ?? true;
+      dto.threshold = dbProduct.stock_thresholds?.threshold_value ?? null;
       dto.notes = null;
       dto.hasAssetEntry = true;
     } else {
@@ -56,11 +86,27 @@ export class ProductsService {
       dto.scale = { x: 1, y: 1, z: 1 };
       dto.rotationY = 0;
       dto.tags = [];
-      dto.material = null;
-      dto.finish = null;
-      dto.isEnabled = true;
+      dto.material = osposItem.attributes?.['Material'] || osposItem.attributes?.['material'] || osposItem.material || null;
+      dto.finish = osposItem.attributes?.['Color'] || osposItem.attributes?.['color'] || osposItem.color || null;
+      dto.threshold = null;
+      dto.isEnabled = false;
       dto.notes = null;
       dto.hasAssetEntry = false;
+    }
+
+    // Auto-parse size string into dimensions if asset_sizes wasn't explicitly set
+    if (!dto.dimensions && dto.size) {
+      const match = dto.size.match(/(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)/);
+      if (match) {
+        let w = parseFloat(match[1]);
+        let h = parseFloat(match[2]);
+        const unit = dto.size.toLowerCase().includes('m') && !dto.size.toLowerCase().includes('cm') && !dto.size.toLowerCase().includes('mm') ? 'm' : 'cm';
+        if (dto.size.toLowerCase().includes('mm')) {
+          w = w / 10;
+          h = h / 10;
+        }
+        dto.dimensions = { width: w, height: h, depth: 1, unit };
+      }
     }
 
     return dto;
@@ -68,14 +114,17 @@ export class ProductsService {
 
   /**
    * Returns all active OSPOS items merged with their visual asset entries.
+   * If includeHidden is false, it only returns items that have an asset entry and are enabled/visible.
    */
-  async findAll(): Promise<UnifiedItemDto[]> {
-    const [osposItems, dbProducts] = await Promise.all([
+  async findAll(includeHidden: boolean = false, filters: any = {}): Promise<UnifiedItemDto[]> {
+    const [osposItems, dbProducts, activeReservations] = await Promise.all([
       this.osposService.fetchAllItems(),
       this.prisma.products.findMany({
         include: {
+          stock_thresholds: true,
           product_assets: {
             include: {
+              asset_sizes: true,
               asset_transformations: true,
               product_asset_tags: {
                 include: {
@@ -86,42 +135,191 @@ export class ProductsService {
           },
         },
       }),
+      this.prisma.inventory_reservations.findMany({
+        where: {
+          status: 'active',
+          expires_at: { gte: new Date() },
+        },
+        select: {
+          ospos_item_id: true,
+          quantity: true,
+        },
+      }),
     ]);
+
+    const reservedMap = new Map<number, number>();
+    for (const res of activeReservations) {
+      reservedMap.set(
+        res.ospos_item_id,
+        (reservedMap.get(res.ospos_item_id) || 0) + res.quantity,
+      );
+    }
 
     const productMap = new Map(dbProducts.map((p) => [p.ospos_item_id, p]));
 
+    let result: UnifiedItemDto[] = [];
+
     if (osposItems.length === 0 && dbProducts.length > 0) {
       this.logger.warn('OSPOS connection failed or returned no items. Returning local database product records with fallback stock status.');
-      return dbProducts.map((dbProduct) => {
+      result = dbProducts.map((dbProduct) => {
         const fallbackOsposItem: OsposItem = {
           item_id: dbProduct.ospos_item_id,
           name: `Product ${dbProduct.ospos_item_id}`,
           category: 'Unknown',
+          category_id: null,
+          subcategory_id: null,
           sku: '',
           description: 'Live catalog details temporarily unavailable.',
           price: 0,
           quantity: 0,
+          reorder_level: 0,
         };
-        return this.buildUnifiedItem(fallbackOsposItem, dbProduct, true);
+        const reservedQty = reservedMap.get(dbProduct.ospos_item_id) || 0;
+        return this.buildUnifiedItem(fallbackOsposItem, dbProduct, true, reservedQty);
+      });
+    } else {
+      result = osposItems.map((item) => {
+        const reservedQty = reservedMap.get(item.item_id) || 0;
+        return this.buildUnifiedItem(item, productMap.get(item.item_id) ?? null, false, reservedQty);
       });
     }
 
-    return osposItems.map((item) =>
-      this.buildUnifiedItem(item, productMap.get(item.item_id) ?? null, false),
-    );
+    // ── Step 2: Collect stale local DB items that are missing from OSPOS ──────
+    // This ensures admin can still see/manage local products not yet in OSPOS.
+    if (osposItems.length > 0) {
+      const osposItemIds = new Set(osposItems.map((item) => item.item_id));
+      for (const dbProduct of dbProducts) {
+        if (!osposItemIds.has(dbProduct.ospos_item_id)) {
+          // Smart fallback: infer name and category from image URL if available
+          let fallbackName = `Product ${dbProduct.ospos_item_id}`;
+          let fallbackCategory = 'Unknown';
+
+          if (dbProduct.product_assets?.image_url) {
+            const imgUrl = dbProduct.product_assets.image_url.toLowerCase();
+            if (imgUrl.includes('tile')) fallbackCategory = 'Tiles';
+            else if (imgUrl.includes('basin') || imgUrl.includes('sink')) fallbackCategory = 'Wash Basins';
+            else if (imgUrl.includes('closet') || imgUrl.includes('toilet')) fallbackCategory = 'Water Closets';
+
+            // Try to extract a nice name from the filename
+            const filename = imgUrl.split('/').pop() || '';
+            const namePart = filename.split('.')[0];
+            if (namePart) {
+              fallbackName = namePart.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+            }
+          }
+
+          const fallbackOsposItem: OsposItem = {
+            item_id: dbProduct.ospos_item_id,
+            name: fallbackName,
+            category: fallbackCategory,
+            category_id: null,
+            subcategory_id: null,
+            sku: `LOCAL-${dbProduct.ospos_item_id}`,
+            description: 'Local product record (missing from OSPOS).',
+            price: 0,
+            quantity: 0,
+            reorder_level: 0,
+          };
+          result.push(this.buildUnifiedItem(fallbackOsposItem, dbProduct, true));
+        }
+      }
+    }
+
+    if (!includeHidden) {
+      result = result.filter((item) => item.hasAssetEntry && item.isEnabled);
+    }
+
+    // Apply Dynamic Filters
+    const {
+      categoryId,
+      subcategoryId,
+      search,
+      brand,
+      material,
+      finish,
+      size,
+      minPrice,
+      maxPrice,
+    } = filters;
+
+    if (categoryId !== undefined) {
+      result = result.filter((item) => item.categoryId === categoryId);
+    }
+
+    if (subcategoryId !== undefined) {
+      result = result.filter((item) => item.subcategoryId === subcategoryId);
+    }
+
+    if (search) {
+      const searchLower = search.toLowerCase();
+      result = result.filter((item) => {
+        const nameMatches = item.name.toLowerCase().includes(searchLower);
+        const skuMatches = item.sku.toLowerCase().includes(searchLower);
+        return nameMatches || skuMatches;
+      });
+    }
+
+    if (brand) {
+      const brandsLower = brand.toLowerCase().split(',');
+      result = result.filter((item) => item.brand && brandsLower.includes(item.brand.toLowerCase()));
+    }
+
+    if (material) {
+      const materialsLower = material.toLowerCase().split(',');
+      result = result.filter((item) => item.material && materialsLower.includes(item.material.toLowerCase()));
+    }
+
+    if (finish) {
+      const finishesLower = finish.toLowerCase().split(',');
+      result = result.filter((item) => item.finish && finishesLower.includes(item.finish.toLowerCase()));
+    }
+
+    if (size) {
+      const sizesLower = size.toLowerCase().split(',');
+      result = result.filter((item) => item.tags.some(tag => sizesLower.includes(tag.toLowerCase())));
+    }
+
+    if (minPrice !== undefined) {
+      result = result.filter((item) => item.price >= minPrice);
+    }
+
+    if (maxPrice !== undefined) {
+      result = result.filter((item) => item.price <= maxPrice);
+    }
+
+    return result;
+  }
+
+  /**
+   * Returns all OSPOS items that do not have a corresponding record in the local products table.
+   * These items are pending review and can be imported into the Tile Vista catalog.
+   */
+  async getPendingReviewItems(): Promise<OsposItem[]> {
+    const [osposItems, dbProducts] = await Promise.all([
+      this.osposService.fetchAllItems(),
+      this.prisma.products.findMany({
+        select: { ospos_item_id: true },
+      }),
+    ]);
+
+    const existingIds = new Set(dbProducts.map((p) => p.ospos_item_id));
+    return osposItems.filter((item) => !existingIds.has(item.item_id));
   }
 
   /**
    * Returns a single product merged with live stock and visual asset entries.
+   * If includeHidden is false, throws a 404 if the item lacks an asset entry or is not visible.
    */
-  async findOne(osposItemId: number): Promise<UnifiedItemDto> {
-    const [osposItems, dbProduct] = await Promise.all([
+  async findOne(osposItemId: number, includeHidden: boolean = false): Promise<UnifiedItemDto> {
+    const [osposItems, dbProduct, activeReservations] = await Promise.all([
       this.osposService.fetchAllItems(),
       this.prisma.products.findUnique({
         where: { ospos_item_id: osposItemId },
         include: {
+          stock_thresholds: true,
           product_assets: {
             include: {
+              asset_sizes: true,
               asset_transformations: true,
               product_asset_tags: {
                 include: {
@@ -132,29 +330,120 @@ export class ProductsService {
           },
         },
       }),
+      this.prisma.inventory_reservations.findMany({
+        where: {
+          ospos_item_id: osposItemId,
+          status: 'active',
+          expires_at: { gte: new Date() },
+        },
+        select: {
+          quantity: true,
+        },
+      }),
     ]);
+
+    const reservedQuantity = activeReservations.reduce((sum, r) => sum + r.quantity, 0);
 
     const osposItem = osposItems.find((i) => i.item_id === osposItemId);
     if (!osposItem) {
-      if (dbProduct) {
-        this.logger.warn(`OSPOS item details not available for product ID ${osposItemId}. Returning local database metadata with fallback stock status.`);
+      // If OSPOS returned NO items at all, assume it's down and return a fallback
+      if (dbProduct && osposItems.length === 0) {
+        this.logger.warn(`OSPOS connection failed. Returning local database metadata for product ID ${osposItemId} with fallback stock status.`);
         const fallbackOsposItem: OsposItem = {
-          item_id: osposItemId,
-          name: `Product ${osposItemId}`,
+          item_id: dbProduct.ospos_item_id,
+          name: `Product ${dbProduct.ospos_item_id}`,
           category: 'Unknown',
+          category_id: null,
+          subcategory_id: null,
           sku: '',
           description: 'Live details temporarily unavailable.',
           price: 0,
           quantity: 0,
+          reorder_level: 0,
         };
-        return this.buildUnifiedItem(fallbackOsposItem, dbProduct, true);
+        const fallbackUnified = this.buildUnifiedItem(fallbackOsposItem, dbProduct, true, reservedQuantity);
+        if (!includeHidden && (!fallbackUnified.hasAssetEntry || !fallbackUnified.isEnabled)) {
+          throw new NotFoundException(`Product with ID ${osposItemId} not found.`);
+        }
+        return fallbackUnified;
       }
+      
+      // If OSPOS is online (length > 0) but the item wasn't found, it means it was deleted in OSPOS.
       throw new NotFoundException(`Product with ID ${osposItemId} not found.`);
     }
 
-    return this.buildUnifiedItem(osposItem, dbProduct, false);
+    const unified = this.buildUnifiedItem(osposItem, dbProduct, false, reservedQuantity);
+    if (!includeHidden && (!unified.hasAssetEntry || !unified.isEnabled)) {
+      throw new NotFoundException(`Product with ID ${osposItemId} not found.`);
+    }
+    return unified;
   }
 
+  /**
+   * Fetches the category hierarchy from OSPOS.
+   */
+  async getCategories(): Promise<any[]> {
+    const categories = await this.osposService.fetchCategories();
+    if (categories && categories.length > 0) {
+      return categories;
+    }
+    this.logger.warn('OSPOS categories unavailable. Returning fallback category structure.');
+    return [
+      { id: 1, name: 'Tiles', subcategories: [
+          { id: 1, name: 'Floor Tiles' }, { id: 2, name: 'Wall Tiles' }, 
+          { id: 3, name: 'Outdoor Tiles' }, { id: 4, name: 'Mosaics' }
+        ] 
+      },
+      { id: 2, name: 'Wash Basins', subcategories: [
+          { id: 5, name: 'Vessel' }, { id: 6, name: 'Wall Hung' }, { id: 7, name: 'Floor Standing' }
+        ] 
+      },
+      { id: 3, name: 'Water Closets', subcategories: [
+          { id: 8, name: 'Floor Mounted' }, { id: 9, name: 'Wall Hung' }, { id: 10, name: 'Smart WC' }
+        ] 
+      },
+      { id: 4, name: 'Accessories', subcategories: [
+          { id: 11, name: 'Faucets' }, { id: 12, name: 'Bath & Shower' },
+          { id: 13, name: 'Kitchen Sinks' }, { id: 14, name: 'Mirrors' }
+        ] 
+      },
+    ];
+  }
+
+  /**
+   * GET available filters (brands, materials, finishes, sizes) dynamically
+   */
+  async getAvailableFilters(categoryId?: number) {
+    const filters: any = categoryId !== undefined ? { categoryId } : {};
+    // Fetch all active items, merging OSPOS + TileVista local data
+    const items = await this.findAll(false, filters);
+
+    const brands = new Set<string>();
+    const materials = new Set<string>();
+    const finishes = new Set<string>();
+    const sizes = new Set<string>();
+
+    items.forEach((item) => {
+      if (item.brand) brands.add(item.brand);
+      if (item.material) materials.add(item.material);
+      if (item.finish) finishes.add(item.finish);
+      
+      // Category-specific rule: Only expose size filter choices for Tiles (e.g. 60x60 cm)
+      const isTileCategory = item.category.toLowerCase().includes('tile') || item.categoryId === 1;
+      if (isTileCategory && item.size) {
+        sizes.add(item.size);
+      }
+    });
+
+    return {
+      brands: Array.from(brands).sort(),
+      materials: Array.from(materials).sort(),
+      finishes: Array.from(finishes).sort(),
+      sizes: Array.from(sizes).sort(),
+    };
+  }
+
+  // ─── INTERNAL HELPERS ────────────────────────────────────────────────────────
   /**
    * Safe method used by core modules to fetch product metadata and live stock.
    */
@@ -174,21 +463,6 @@ export class ProductsService {
       include: { product_assets: true }
     });
 
-    let categoryId = '';
-    const defaultCategory = await this.prisma.categories.findFirst();
-    if (defaultCategory) {
-      categoryId = defaultCategory.category_id;
-    } else {
-      categoryId = crypto.randomUUID();
-      await this.prisma.categories.create({
-        data: {
-          category_id: categoryId,
-          category_name: 'General',
-          description: 'Default category',
-        }
-      });
-    }
-
     if (!product) {
       const productId = crypto.randomUUID();
       const assetId = crypto.randomUUID();
@@ -198,7 +472,6 @@ export class ProductsService {
         data: {
           product_id: productId,
           ospos_item_id: osposItemId,
-          category_id: categoryId,
           is_active: dto.isEnabled ?? true,
           product_assets: {
             create: {
@@ -221,27 +494,94 @@ export class ProductsService {
         include: { product_assets: true }
       });
     } else {
-      await this.prisma.products.update({
-        where: { ospos_item_id: osposItemId },
-        data: {
-          is_active: dto.isEnabled ?? undefined,
-          product_assets: {
-            update: {
-              material_type: dto.material ?? undefined,
-              color_family: dto.finish ?? undefined,
-              is_visible: dto.isEnabled ?? undefined,
-              asset_transformations: {
-                update: {
-                  scale_x: dto.scaleX ?? undefined,
-                  scale_y: dto.scaleY ?? undefined,
-                  scale_z: dto.scaleZ ?? undefined,
-                  rotation_y: dto.rotationY ?? undefined,
-                }
-              }
-            }
+      if (dto.isEnabled !== undefined) {
+        await this.prisma.products.update({
+          where: { ospos_item_id: osposItemId },
+          data: { is_active: dto.isEnabled }
+        });
+      }
+
+      let asset = product.product_assets;
+      if (!asset) {
+        const assetId = crypto.randomUUID();
+        asset = await this.prisma.product_assets.create({
+          data: {
+            asset_id: assetId,
+            product_id: product.product_id,
+            material_type: dto.material ?? null,
+            color_family: dto.finish ?? null,
+            is_visible: dto.isEnabled ?? true,
           }
-        }
+        });
+        product.product_assets = asset;
+      } else {
+        asset = await this.prisma.product_assets.update({
+          where: { asset_id: asset.asset_id },
+          data: {
+            material_type: dto.material ?? undefined,
+            color_family: dto.finish ?? undefined,
+            is_visible: dto.isEnabled ?? undefined,
+          }
+        });
+      }
+
+      const existingTransform = await this.prisma.asset_transformations.findUnique({
+        where: { asset_id: asset.asset_id }
       });
+
+      if (existingTransform) {
+        await this.prisma.asset_transformations.update({
+          where: { asset_id: asset.asset_id },
+          data: {
+            scale_x: dto.scaleX ?? undefined,
+            scale_y: dto.scaleY ?? undefined,
+            scale_z: dto.scaleZ ?? undefined,
+            rotation_y: dto.rotationY ?? undefined,
+          }
+        });
+      } else {
+        await this.prisma.asset_transformations.create({
+          data: {
+            transform_id: crypto.randomUUID(),
+            asset_id: asset.asset_id,
+            scale_x: dto.scaleX ?? 1.0,
+            scale_y: dto.scaleY ?? 1.0,
+            scale_z: dto.scaleZ ?? 1.0,
+            rotation_y: dto.rotationY ?? 0.0,
+          }
+        });
+      }
+    }
+
+    // Process asset_sizes if dimensions are specified
+    if ((dto.width !== undefined || dto.height !== undefined || dto.depth !== undefined || dto.unit !== undefined) && product.product_assets) {
+      const assetId = product.product_assets.asset_id;
+      const existingSize = await this.prisma.asset_sizes.findUnique({
+        where: { asset_id: assetId }
+      });
+
+      if (existingSize) {
+        await this.prisma.asset_sizes.update({
+          where: { asset_id: assetId },
+          data: {
+            width: dto.width !== undefined ? dto.width : undefined,
+            height: dto.height !== undefined ? dto.height : undefined,
+            depth: dto.depth !== undefined ? dto.depth : undefined,
+            unit: dto.unit ? (dto.unit === 'm' ? 'm' : 'cm') : undefined,
+          }
+        });
+      } else {
+        await this.prisma.asset_sizes.create({
+          data: {
+            size_id: crypto.randomUUID(),
+            asset_id: assetId,
+            width: dto.width ?? 0,
+            height: dto.height ?? 0,
+            depth: dto.depth ?? 0,
+            unit: dto.unit === 'm' ? 'm' : 'cm',
+          }
+        });
+      }
     }
 
     // Process tags relations if specified
@@ -273,7 +613,110 @@ export class ProductsService {
       }
     }
 
-    return this.findOne(osposItemId);
+    // Process stock_thresholds if threshold is specified
+    if (dto.threshold !== undefined && dto.threshold !== null) {
+      if (typeof dto.threshold !== 'number' || dto.threshold < 0 || !Number.isInteger(dto.threshold)) {
+        throw new BadRequestException('Stock threshold must be a valid non-negative integer');
+      }
+
+      await this.prisma.stock_thresholds.upsert({
+        where: { product_id: product.product_id },
+        create: {
+          threshold_id: crypto.randomUUID(),
+          product_id: product.product_id,
+          threshold_value: dto.threshold,
+        },
+        update: {
+          threshold_value: dto.threshold,
+        },
+      });
+    }
+
+    return this.findOne(osposItemId, true);
+  }
+
+  async publishProduct(data: PublishProductDto) {
+    // 1. Verify osposItemId exists in live OSPOS
+    const allOsposItems = await this.osposService.fetchAllItems();
+    const osposItem = allOsposItems.find(i => i.item_id === data.osposItemId);
+    if (!osposItem) {
+      throw new NotFoundException(`OSPOS item with ID ${data.osposItemId} not found.`);
+    }
+
+    // 2. Verify no products row already exists
+    const existing = await this.prisma.products.findUnique({
+      where: { ospos_item_id: data.osposItemId }
+    });
+    if (existing) {
+      throw new ConflictException(`Product with OSPOS item ID ${data.osposItemId} already exists. Please edit it instead.`);
+    }
+
+    // 3. Create all in transaction
+    return this.prisma.$transaction(async (tx) => {
+      const productId = crypto.randomUUID();
+      const assetId = crypto.randomUUID();
+
+      const product = await tx.products.create({
+        data: {
+          product_id: productId,
+          ospos_item_id: data.osposItemId,
+          is_active: true,
+        }
+      });
+
+      const productAsset = await tx.product_assets.create({
+        data: {
+          asset_id: assetId,
+          product_id: productId,
+          image_url: data.imageUrl,
+          thumbnail_url: data.thumbnailUrl,
+          glb_url: data.glbUrl,
+          material_type: data.materialType,
+          color_family: data.colorFamily,
+          is_visible: true,
+        }
+      });
+
+      await tx.asset_sizes.create({
+        data: {
+          size_id: crypto.randomUUID(),
+          asset_id: assetId,
+          width: data.width,
+          height: data.height,
+          depth: data.depth,
+          unit: data.unit === 'm' ? 'm' : 'cm',
+        }
+      });
+
+      await tx.asset_transformations.create({
+        data: {
+          transform_id: crypto.randomUUID(),
+          asset_id: assetId,
+          scale_x: 1.0,
+          scale_y: 1.0,
+          scale_z: 1.0,
+          rotation_x: 0,
+          rotation_y: 0,
+          rotation_z: 0,
+        }
+      });
+
+      if (data.threshold !== undefined && data.threshold !== null) {
+        if (typeof data.threshold !== 'number' || data.threshold < 0 || !Number.isInteger(data.threshold)) {
+          throw new BadRequestException('Stock threshold must be a valid non-negative integer');
+        }
+
+        await tx.stock_thresholds.create({
+          data: {
+            threshold_id: crypto.randomUUID(),
+            product_id: productId,
+            threshold_value: data.threshold,
+          },
+        });
+      }
+
+      return { product, productAsset };
+    });
   }
 
   /**

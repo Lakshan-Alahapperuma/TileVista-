@@ -47,3 +47,47 @@ The build executes successfully without any compilation errors.
 * **Branch**: Dev branch `feature/ospos-integration`.
 * **Codebase Health**: Redundant files from the old `items` module were fully deleted. There are no duplicate functions, files, or unused imports.
 * **Commit**: Commits have been created to save all refactoring progress cleanly.
+
+---
+
+## 5. June 27, 2026 Session Updates: Admin Login Resolution & Codebase Audit
+During this session, we audited the project structure and addressed a critical access issue:
+* **Admin Login 401 Unauthorized Issue**: Investigated reports of admin users being unable to log in (returning a 401 response). Discovered that importing `database/tilevista.sql` only creates the relational table definitions but does not populate the initial data. Consequently, the `users` table is left empty.
+  * **Solution**: To log in with default credentials (`admin@tilevista.com` / `admin123`), the database seeder must be run locally to insert mock records:
+    ```bash
+    node database/prisma/seed.cjs
+    ```
+* **OSPOS Integration Architecture Analysis**: Documented how the NestJS backend maps, queries, and deduplicates calls to the external OSPOS API using an HTTP data aggregation design, maintaining full storefront resilience via custom stale stock indicators.
+* **Cleanup of Temporary/Orphaned Files**:
+  * Deleted diagnostic scripts `backend/_check_users.cjs` and `backend/_test_login.cjs`.
+  * Highlighted `database/prisma/seed.ts` as a redundant duplicate of `database/prisma/seed.cjs` (CommonJS version), marking it for cleanup to ensure code cleanliness.
+
+---
+
+## 6. June 27, 2026 Session Updates: Environment Consolidation & Seeding Automation
+We optimized workspace hygiene and streamlined the configuration loading processes:
+* **Consolidation of `.env` files**: 
+  * Merged the OSPOS configurations from `backend/.env` into the root `.env` and `.env.example`, establishing a single source of truth configuration at the workspace root.
+  * Installed `@nestjs/config` in the backend and configured it globally inside `AppModule` to load settings from `../.env` (the parent root directory).
+  * Removed the duplicate/redundant local `backend/.env` file.
+* **Database Seeding Improvements**:
+  * Configured `prisma.seed` inside `backend/package.json` to execute `node ../database/prisma/seed.cjs`. This aligns standard `npx prisma db seed` calls to run the correct CommonJS database seeder.
+  * Added programmatic loading (`process.loadEnvFile`) within `database/prisma/seed.cjs` so that running database seed operations inside child processes (e.g., from the Prisma CLI) automatically resolves the `DATABASE_URL` from the workspace root.
+  * Safely deleted the redundant/unused TypeScript seed file (`database/prisma/seed.ts`).
+* **Database Schema Cleanup**:
+  * Deleted the obsolete `backend/prisma` directory containing outdated schema definitions and migration histories, establishing `database/prisma` as the sole source of truth for the database schema.
+
+
+---
+
+## 7. Category Model Cleanup & OSPOS Reliance
+* **Removed Local `categories` Table**: Identified that the local `categories` Prisma model was dead weight, serving only as a placeholder to satisfy the `products.category_id` foreign key. No frontend or backend services actually read `category_name` from the local database.
+* **Full OSPOS Category Delegation**: Cleaned up `products.service.ts` and `packages.service.ts` to remove dummy category creation. The application now fully relies on the live OSPOS API for all category and subcategory filtering across the frontend (Shop Catalogue, 3D Designer, Admin Inventory).
+* **Database Schema Pruned**: Dropped the `categories` table and `category_id` column from the `products` table using a Prisma migration (`remove_unused_local_categories`), maintaining a leaner, sync-free schema.
+
+## 8. June 29, 2026 Session Updates: Publishing Pipeline & Visibility Gates
+We hardened the boundary between OSPOS inventory and the public storefront to prevent unfinished or unreviewed items from leaking to consumers.
+* **Strict Visibility Gates**: Implemented `hasAssetEntry && is_visible` checks across the platform. Items missing a local `products` row or marked invisible are now explicitly stripped from public catalog lists, block single-product page access (returning 404), and reject checkout/cart attempts.
+* **Cart Resilience**: Updated the cart logic to flag items that become unpublished after being added to a cart with an `isAvailable: false` flag, gracefully disabling checkout for those items instead of silently removing them.
+* **Publishing Pipeline**: Built the `POST /admin/products/publish` endpoint to transition "pending review" items from OSPOS into the TileVista database. This endpoint runs a robust, ACID-compliant Prisma transaction that creates the `products`, `product_assets`, `asset_sizes`, and `asset_transformations` rows simultaneously, preventing orphaned DB states.
+* **DTO Validation**: Hardened DTOs (`PublishProductDto` and `UpsertAssetDto`) with `@IsPositive()` and `@IsIn()` class-validator constraints to reject corrupted geometry/scale configurations from the admin panel.

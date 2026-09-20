@@ -10,10 +10,44 @@ export interface OsposItem {
   item_id: number;
   name: string;
   category: string;
+  category_id: number | null;
+  subcategory_id: number | null;
   sku: string;
   description: string;
   price: number;
   quantity: number;
+  reorder_level: number;
+  brand?: string | null;
+  color?: string | null;
+  material?: string | null;
+  attributes?: Record<string, string>;
+}
+
+export interface CreateOsposQuoteDto {
+  reference: string;
+  location_id: number;
+  customer: {
+    user_id: string;
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string;
+  };
+  items: {
+    ospos_item_id: number;
+    quantity: number;
+    unit_price: number;
+  }[];
+  expires_at: string;
+  comment?: string;
+}
+
+export interface OsposQuoteResponseDto {
+  success: boolean;
+  message: string;
+  reference: string;
+  ospos_sale_id?: number;
+  status?: string;
 }
 
 /**
@@ -38,7 +72,7 @@ export class OsposIntegrationService {
     try {
       this.logger.log('Fetching full item catalog from OSPOS...');
       const response = await firstValueFrom(
-        this.httpService.get<OsposItem[]>(`${this.baseUrl}/items`, {
+        this.httpService.get<any[]>(`${this.baseUrl}/items`, {
           headers: {
             Authorization: this.secretToken,
             Accept: 'application/json',
@@ -46,9 +80,35 @@ export class OsposIntegrationService {
         }),
       );
       this.logger.log(`Received ${response.data.length} items from OSPOS.`);
-      return response.data;
+      return response.data.map((item) => ({
+        ...item,
+        brand: item.attributes?.Brand || item.brand || null,
+        color: item.attributes?.Color || item.color || null,
+        material: item.attributes?.Material || item.material || null,
+      }));
     } catch (error) {
       this.logger.error(`Failed to fetch item catalog from OSPOS: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Fetches the category tree from OSPOS.
+   */
+  async fetchCategories(): Promise<any[]> {
+    try {
+      this.logger.log('Fetching category tree from OSPOS...');
+      const response = await firstValueFrom(
+        this.httpService.get<any[]>(`${this.baseUrl}/categories`, {
+          headers: {
+            Authorization: this.secretToken,
+            Accept: 'application/json',
+          },
+        }),
+      );
+      return response.data;
+    } catch (error) {
+      this.logger.error(`Failed to fetch categories from OSPOS: ${error.message}`);
       return [];
     }
   }
@@ -120,4 +180,156 @@ export class OsposIntegrationService {
       );
     }
   }
+
+  /**
+   * Fetches paginated sales line-item data from OSPOS with computed revenue, tax, and EAV attributes.
+   */
+  async fetchSalesData(params: {
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+    locationId?: number;
+    saleType?: number;
+  } = {}): Promise<OsposSalesResponse> {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.startDate) queryParams.set('start_date', params.startDate);
+      if (params.endDate) queryParams.set('end_date', params.endDate);
+      if (params.page) queryParams.set('page', String(params.page));
+      if (params.limit) queryParams.set('limit', String(params.limit));
+      if (params.locationId) queryParams.set('location_id', String(params.locationId));
+      if (params.saleType !== undefined) queryParams.set('sale_type', String(params.saleType));
+
+      const url = `${this.baseUrl}/sales?${queryParams.toString()}`;
+      this.logger.log(`Fetching sales data from OSPOS: ${url}`);
+
+      const response = await firstValueFrom(
+        this.httpService.get<OsposSalesResponse>(url, {
+          headers: {
+            Authorization: this.secretToken,
+            Accept: 'application/json',
+          },
+          timeout: 15000, // Sales queries may be heavier
+        }),
+      );
+
+      this.logger.log(
+        `Received ${response.data.data.length} sale line items (page ${response.data.pagination.page}/${response.data.pagination.totalPages})`,
+      );
+      return response.data;
+    } catch (error) {
+      this.logger.error(`Failed to fetch sales data from OSPOS: ${error.message}`);
+      return {
+        data: [],
+        pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+        summary: { totalRevenue: 0, totalTax: 0, totalTransactions: 0, dateRange: { start: '', end: '' } },
+      };
+    }
+  }
+
+  /**
+   * Dispatches a quotation payload to OSPOS to create a suspended sale.
+   * Catches errors gracefully so local TileVista orders remain safe if OSPOS is unreachable.
+   */
+  async createQuote(dto: CreateOsposQuoteDto): Promise<OsposQuoteResponseDto> {
+    try {
+      this.logger.log(`Dispatching OSPOS quote creation for reference: ${dto.reference}...`);
+      const response = await firstValueFrom(
+        this.httpService.post<OsposQuoteResponseDto>(
+          `${this.baseUrl}/quote`,
+          dto,
+          {
+            headers: {
+              Authorization: this.secretToken,
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+          },
+        ),
+      );
+      this.logger.log(`OSPOS quote created successfully for reference ${dto.reference}. Sale ID: ${response.data?.ospos_sale_id}`);
+      return response.data;
+    } catch (error) {
+      this.logger.warn(`Failed to create quote in OSPOS for reference ${dto.reference}: ${error.message}`);
+      return {
+        success: false,
+        message: error.message || 'OSPOS quote creation failed',
+        reference: dto.reference,
+      };
+    }
+  }
+
+  /**
+   * Dispatches a cancellation request for a TileVista-linked suspended quote in OSPOS.
+   */
+  async cancelQuote(reference: string): Promise<any> {
+    try {
+      this.logger.log(`Dispatching OSPOS quote cancellation for reference: ${reference}...`);
+      const response = await firstValueFrom(
+        this.httpService.post(
+          `${this.baseUrl}/quote/cancel`,
+          { reference },
+          {
+            headers: {
+              Authorization: this.secretToken,
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+          },
+        ),
+      );
+      this.logger.log(`OSPOS quote cancelled successfully for reference ${reference}.`);
+      return response.data;
+    } catch (error) {
+      this.logger.warn(`Failed to cancel quote in OSPOS for reference ${reference}: ${error.message}`);
+      return { success: false, message: error.message };
+    }
+  }
+}
+
+/**
+ * Typed interface for a single sale line item returned by GET /api/tilevista/sales.
+ */
+export interface OsposSaleItem {
+  sale_id: number;
+  sale_time: string;
+  sale_type: number;
+  customer_id: number | null;
+  employee_id: number;
+  invoice_number: string | null;
+  item_id: number;
+  line: number;
+  item_name: string;
+  sku: string;
+  category: string;
+  category_id: number | null;
+  quantity_purchased: number;
+  item_cost_price: number;
+  item_unit_price: number;
+  discount: number;
+  discount_type: number;
+  line_total: number;
+  tax_amount: number;
+  current_stock: number;
+  reorder_level: number;
+  brand: string | null;
+  color: string | null;
+  material: string | null;
+}
+
+export interface OsposSalesResponse {
+  data: OsposSaleItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  summary: {
+    totalRevenue: number;
+    totalTax: number;
+    totalTransactions: number;
+    dateRange: { start: string; end: string };
+  };
 }

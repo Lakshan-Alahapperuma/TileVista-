@@ -1,3 +1,5 @@
+import { IsNumber, IsString, IsOptional, IsIn, IsPositive, IsBoolean } from 'class-validator';
+
 /**
  * The unified DTO representing a merged OSPOS item + TileVista asset entry.
  * Live pricing, stock, SKU, name, and category come from OSPOS.
@@ -6,10 +8,16 @@
 export class UnifiedItemDto {
   /** OSPOS item_id — the single source of truth identifier */
   itemId: number;
+  /** TileVista product database UUID, if mapped */
+  productId?: string | null;
   /** Live item name from OSPOS */
   name: string;
   /** Category string from OSPOS (e.g. "Tiles", "Sanitaryware") */
   category: string;
+  /** Category ID from OSPOS */
+  categoryId: number | null;
+  /** Subcategory ID from OSPOS */
+  subcategoryId: number | null;
   /** Item number / SKU from OSPOS */
   sku: string;
   /** Description from OSPOS */
@@ -18,6 +26,15 @@ export class UnifiedItemDto {
   price: number;
   /** Live quantity at location 1 from OSPOS */
   quantity: number;
+  /** Brand from OSPOS attribute link */
+  brand: string | null;
+  /** Color from OSPOS attribute link */
+  color: string | null;
+  /** Size description (e.g. "60x60 cm") from OSPOS attribute or asset_sizes */
+  size: string | null;
+  /** 3D physical dimensions for virtual room designer (width, height, depth, unit) */
+  dimensions: { width: number; height: number; depth: number; unit: string } | null;
+
 
   // ── Asset Catalog Fields (from TileVista product_assets) ─────────────
   /** Full URL to the product image, or null if no image uploaded */
@@ -34,24 +51,94 @@ export class UnifiedItemDto {
   material: string | null;
   /** Surface finish (e.g. "Matte", "Glossy") */
   finish: string | null;
+  /** TileVista order approval threshold value from stock_thresholds */
+  threshold: number | null;
   /** Whether this item is enabled / visible on the public site */
   isEnabled: boolean;
   /** Admin notes for asset management */
   notes: string | null;
   /** True if a TileVista asset catalog entry exists for this OSPOS item */
   hasAssetEntry: boolean;
+  /** TileVista active non-expired reserved quantity */
+  reservedQuantity?: number;
+  /** Effective available quantity (OSPOS physical stock - active reserved quantity) */
+  effectiveAvailable?: number;
   /** Flag indicating if the stock data is stale (fetched from fallback state) */
   isStaleData?: boolean;
 }
 
 export class UpsertAssetDto {
+  @IsOptional() @IsNumber()
   scaleX?: number;
+  @IsOptional() @IsNumber()
   scaleY?: number;
+  @IsOptional() @IsNumber()
   scaleZ?: number;
+  @IsOptional() @IsNumber()
   rotationY?: number;
+  @IsOptional() @IsString()
   tags?: string; // comma-separated
+  @IsOptional() @IsString()
   material?: string;
+  @IsOptional() @IsString()
   finish?: string;
+  @IsOptional() @IsBoolean()
   isEnabled?: boolean;
+  @IsOptional() @IsString()
   notes?: string;
+  @IsOptional() @IsNumber()
+  width?: number;
+  @IsOptional() @IsNumber()
+  height?: number;
+  @IsOptional() @IsNumber()
+  depth?: number;
+  @IsOptional() @IsString()
+  @IsIn(['cm', 'm'])
+  unit?: 'cm' | 'm';
+  @IsOptional() @IsNumber()
+  threshold?: number;
+}
+
+export class PublishProductDto {
+  @IsNumber()
+  osposItemId: number;
+
+  @IsString()
+  imageUrl: string;
+
+  @IsOptional()
+  @IsString()
+  thumbnailUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  glbUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  materialType?: string;
+
+  @IsOptional()
+  @IsString()
+  colorFamily?: string;
+
+  @IsNumber()
+  @IsPositive()
+  width: number;
+
+  @IsNumber()
+  @IsPositive()
+  height: number;
+
+  @IsNumber()
+  @IsPositive()
+  depth: number;
+
+  @IsString()
+  @IsIn(['cm', 'm'])
+  unit: 'cm' | 'm';
+
+  @IsOptional()
+  @IsNumber()
+  threshold?: number;
 }

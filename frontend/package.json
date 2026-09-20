@@ -12,13 +12,17 @@
   "dependencies": {
     "@react-three/drei": "^9.106.0",
     "@react-three/fiber": "^8.16.6",
+    "@tanstack/react-table": "^8.21.3",
     "@tilevista/types": "*",
     "axios": "^1.7.2",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.390.0",
     "next": "^14.2.3",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "recharts": "^3.10.1",
     "three": "^0.165.0",
+    "uuid": "^10.0.0",
     "zustand": "^4.5.2"
   },
   "devDependencies": {
@@ -26,11 +30,17 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@types/three": "^0.165.0",
+    "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.5.0",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.5.0"
+  },
+  "overrides": {
+    "three": "^0.165.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   }
 }

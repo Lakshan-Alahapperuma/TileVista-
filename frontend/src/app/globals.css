@@ -31,5 +31,24 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #b8a89a;
+  background: #bfa996;
+}
+
+/* Custom Thin Scrollbar for Sidebar on Light Background */
+.thin-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: #e5e7eb; /* tailwind gray-200 */
+  border-radius: 4px;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #d1d5db; /* tailwind gray-300 */
+}
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #e5e7eb transparent;
 }
