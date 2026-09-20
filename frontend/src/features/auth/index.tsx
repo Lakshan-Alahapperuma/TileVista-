@@ -38,11 +38,11 @@ export const AuthFeature: React.FC = () => {
     const isAdmin = role === 'ADMIN' || role === 'ADMINISTRATOR';
 
     if (isAdmin) {
-      // ADMIN: Only honor explicit admin subroutes (e.g. /admin/orders). Otherwise default to /admin/dashboard.
+      // ADMIN: Only honor explicit admin subroutes (e.g. /admin/items). Otherwise default to /admin/orders.
       if (redirectParam && redirectParam.startsWith('/admin')) {
         router.push(redirectParam);
       } else {
-        router.push('/admin/dashboard');
+        router.push('/admin/orders');
       }
       return;
     }

@@ -141,10 +141,10 @@ export default function AdminNotificationsPage() {
         <div className="border-b border-gray-100 pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <Link
-              href="/admin/dashboard"
+              href="/admin/orders"
               className="text-[10px] font-bold text-gray-400 hover:text-[#1A1A1A] uppercase tracking-widest flex items-center gap-1.5 mb-2"
             >
-              <ArrowLeft size={11} /> Back to Dashboard
+              <ArrowLeft size={11} /> Back to Orders
             </Link>
             <h1 className="text-2xl font-bold tracking-tight text-[#1A1A1A] flex items-center gap-3">
               <Bell size={22} className="text-[#8C7A6B]" />
